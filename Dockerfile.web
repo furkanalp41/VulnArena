@@ -1,0 +1,65 @@
+# ============================================================
+# VulnArena Web — Multi-stage production build (SvelteKit + Node adapter)
+# ============================================================
+
+# --- Stage 1: Install dependencies ---
+FROM node:22-alpine AS deps
+
+WORKDIR /app
+COPY web/package.json web/package-lock.json* ./
+RUN npm ci
+
+# --- Stage 2: Build ---
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY web/ .
+
+# Install adapter-node for production SSR
+RUN npm install @sveltejs/adapter-node
+
+# Override svelte config to use adapter-node
+RUN cat > svelte.config.js <<'EOF'
+import adapter from '@sveltejs/adapter-node';
+
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
+  compilerOptions: {
+    runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
+  },
+  kit: {
+    adapter: adapter({
+      out: 'build',
+      precompress: true,
+    })
+  }
+};
+
+export default config;
+EOF
+
+RUN npm run build
+
+# --- Stage 3: Runtime ---
+FROM node:22-alpine
+
+RUN addgroup -S vulnarena && adduser -S vulnarena -G vulnarena
+
+WORKDIR /app
+
+COPY --from=builder /app/build ./build
+COPY --from=builder /app/package.json .
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV ORIGIN=http://localhost:3000
+
+USER vulnarena
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000/ || exit 1
+
+CMD ["node", "build"]

@@ -1,0 +1,49 @@
+# ============================================================
+# VulnArena API — Multi-stage production build
+# ============================================================
+
+# --- Stage 1: Build ---
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache git ca-certificates tzdata
+
+WORKDIR /src
+
+# Cache dependency downloads
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source and build
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/api ./cmd/api
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/migrate ./cmd/migrate
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/seed ./cmd/seed
+
+# --- Stage 2: Runtime ---
+FROM alpine:3.21
+
+RUN apk add --no-cache ca-certificates tzdata \
+    && addgroup -S vulnarena && adduser -S vulnarena -G vulnarena
+
+WORKDIR /app
+
+# Copy binaries from builder
+COPY --from=builder /bin/api /app/api
+COPY --from=builder /bin/migrate /app/migrate
+COPY --from=builder /bin/seed /app/seed
+
+# Copy migrations for the migrate binary
+COPY migrations/ /app/migrations/
+
+# Copy seed data
+COPY seeds/ /app/seeds/
+
+# Run as non-root user
+USER vulnarena
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["/app/api"]

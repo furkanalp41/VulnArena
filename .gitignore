@@ -1,0 +1,37 @@
+# Go
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node (frontend)
+web/node_modules/
+web/.svelte-kit/
+web/build/
+web/.env
+web/.env.*
+!web/.env.example
+
+# Docker
+pgdata/
+redisdata/

@@ -1,0 +1,225 @@
+/* ============================================
+   VulnArena — Design System
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* ---- Typography ---- */
+  --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* ---- Spacing scale ---- */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* ---- Border radius ---- */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+
+  /* ---- Transitions ---- */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* ---- Z-index scale ---- */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal: 300;
+  --z-toast: 400;
+}
+
+/* ============================================
+   Dark Theme (Default)
+   ============================================ */
+[data-theme='dark'] {
+  --bg-primary: #1a1a1a;
+  --bg-secondary: #212121;
+  --bg-tertiary: #2a2a2a;
+  --bg-surface: #2d2d2d;
+  --bg-elevated: #363636;
+  --bg-hover: #3a3a3a;
+  --bg-input: #252525;
+
+  --border-primary: #3d3d3d;
+  --border-secondary: #4a4a4a;
+  --border-accent: #d4a57430;
+
+  --text-primary: #f5f0eb;
+  --text-secondary: #a8a29e;
+  --text-tertiary: #78716c;
+  --text-inverse: #1a1a1a;
+
+  /* Accent colors */
+  --accent-green: #d4a574;
+  --accent-green-dim: #c4955e;
+  --accent-green-glow: #d4a57420;
+  --accent-blue: #8b9dc3;
+  --accent-blue-dim: #7b8db3;
+  --accent-blue-glow: #8b9dc320;
+  --accent-purple: #a78bba;
+  --accent-purple-dim: #9578a8;
+  --accent-red: #c9726b;
+  --accent-red-dim: #b5625b;
+  --accent-red-glow: #c9726b20;
+  --accent-yellow: #d4a574;
+  --accent-orange: #c4855e;
+
+  /* Difficulty scale */
+  --diff-1: #7c9f6b;
+  --diff-3: #8b9dc3;
+  --diff-5: #a78bba;
+  --diff-7: #c4855e;
+  --diff-10: #c9726b;
+
+  /* Code editor */
+  --editor-bg: #1e1e1e;
+  --editor-line-active: #2a2a2a;
+  --editor-line-number: #5a5a5a;
+  --editor-selection: #3a3a5a;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.3);
+  --shadow-glow-green: 0 2px 8px rgba(212, 165, 116, 0.08);
+  --shadow-glow-blue: 0 2px 8px rgba(139, 157, 195, 0.08);
+}
+
+/* ============================================
+   Light Theme
+   ============================================ */
+[data-theme='light'] {
+  --bg-primary: #faf8f5;
+  --bg-secondary: #f2eeea;
+  --bg-tertiary: #e8e3de;
+  --bg-surface: #ffffff;
+  --bg-elevated: #ffffff;
+  --bg-hover: #f5f1ed;
+  --bg-input: #ffffff;
+
+  --border-primary: #e0dbd5;
+  --border-secondary: #cdc6be;
+  --border-accent: #b8845a30;
+
+  --text-primary: #1a1a1a;
+  --text-secondary: #6b6560;
+  --text-tertiary: #9c9690;
+  --text-inverse: #faf8f5;
+
+  --accent-green: #b8845a;
+  --accent-green-dim: #a6744a;
+  --accent-green-glow: #b8845a20;
+  --accent-blue: #6b7fa3;
+  --accent-blue-dim: #5b6f93;
+  --accent-blue-glow: #6b7fa320;
+  --accent-purple: #8b6fa8;
+  --accent-purple-dim: #7b5f98;
+  --accent-red: #b05a53;
+  --accent-red-dim: #9e4a43;
+  --accent-red-glow: #b05a5320;
+  --accent-yellow: #b8845a;
+  --accent-orange: #a6744a;
+
+  --diff-1: #6b8f5b;
+  --diff-3: #6b7fa3;
+  --diff-5: #8b6fa8;
+  --diff-7: #a6744a;
+  --diff-10: #b05a53;
+
+  --editor-bg: #faf8f5;
+  --editor-line-active: #f2eeea;
+  --editor-line-number: #9c9690;
+  --editor-selection: #e8e3de;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.1);
+  --shadow-glow-green: 0 2px 8px rgba(184, 132, 90, 0.06);
+  --shadow-glow-blue: 0 2px 8px rgba(107, 127, 163, 0.06);
+}
+
+/* ============================================
+   Reset & Base Styles
+   ============================================ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+code, pre, kbd, samp {
+  font-family: var(--font-mono);
+}
+
+a {
+  color: var(--accent-blue);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+a:hover {
+  color: var(--accent-blue-dim);
+}
+
+::selection {
+  background: var(--accent-green-glow);
+  color: var(--text-primary);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* ============================================
+   Utility Classes
+   ============================================ */
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.text-accent {
+  color: var(--accent-green);
+}

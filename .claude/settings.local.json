@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go version:*)",
+      "Bash(go mod:*)",
+      "Bash(mkdir:*)",
+      "Bash(go get:*)",
+      "Bash(go build:*)",
+      "Bash(npx sv:*)",
+      "Bash(npm install:*)",
+      "Bash(npx svelte-kit:*)",
+      "Bash(npm run:*)",
+      "Bash(go vet:*)",
+      "Bash(npx svelte-check:*)"
+    ]
+  }
+}

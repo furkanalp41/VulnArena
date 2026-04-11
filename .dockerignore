@@ -1,0 +1,13 @@
+.git
+.github
+.claude
+.env
+.env.*
+!.env.example
+bin/
+*.md
+*.log
+node_modules
+web/node_modules
+web/.svelte-kit
+web/build

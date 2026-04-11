@@ -1,0 +1,131 @@
+services:
+  # ── Database ──
+  postgres:
+    image: postgres:16-alpine
+    container_name: vulnarena-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vulnarena}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-vulnarena}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vulnarena}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ── Cache ──
+  redis:
+    image: redis:7-alpine
+    container_name: vulnarena-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required} --maxmemory 128mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+  # ── Go API ──
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: vulnarena-api
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-vulnarena}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vulnarena}?sslmode=disable
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-168h}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    networks:
+      - backend
+
+  # ── Migrations (run once) ──
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: vulnarena-migrate
+    entrypoint: ["/app/migrate", "-direction", "up"]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-vulnarena}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vulnarena}?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - backend
+
+  # ── SvelteKit Frontend ──
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: vulnarena-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      ORIGIN: ${ORIGIN:-http://localhost}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    networks:
+      - frontend
+
+  # ── Nginx Reverse Proxy ──
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: vulnarena-nginx
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    networks:
+      - frontend
+      - backend
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  frontend:
+    driver: bridge
+  backend:
+    driver: bridge
