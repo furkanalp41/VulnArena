@@ -1,7 +1,8 @@
+import { PUBLIC_API_URL } from '$env/static/public';
 import { auth } from '$lib/stores/auth';
 import { goto } from '$app/navigation';
 
-const API_BASE = 'http://localhost:8080/api/v1';
+const API_BASE = PUBLIC_API_URL;
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;

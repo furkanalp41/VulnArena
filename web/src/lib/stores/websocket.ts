@@ -1,11 +1,16 @@
 import { writable } from 'svelte/store';
+import { PUBLIC_API_URL } from '$env/static/public';
 
 export interface WSEvent {
   type: string;
   [key: string]: string;
 }
 
-const WS_URL = 'ws://localhost:8080/api/v1/ws';
+function getWsUrl(path: string): string {
+  return PUBLIC_API_URL.replace(/^http/, 'ws') + path;
+}
+
+const WS_URL = getWsUrl('/ws');
 const MAX_RECONNECT_DELAY = 30_000;
 
 let socket: WebSocket | null = null;
@@ -80,7 +85,7 @@ export function disconnect() {
 
 // ─── Authenticated Collab WebSocket ───
 
-const COLLAB_WS_URL = 'ws://localhost:8080/api/v1/ws/collab';
+const COLLAB_WS_URL = getWsUrl('/ws/collab');
 
 let collabSocket: WebSocket | null = null;
 let collabReconnectDelay = 1000;

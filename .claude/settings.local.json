@@ -11,7 +11,8 @@
       "Bash(npx svelte-kit:*)",
       "Bash(npm run:*)",
       "Bash(go vet:*)",
-      "Bash(npx svelte-check:*)"
+      "Bash(npx svelte-check:*)",
+      "Bash(xargs cat:*)"
     ]
   }
 }

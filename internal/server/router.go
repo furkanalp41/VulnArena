@@ -30,6 +30,7 @@ type RouterDeps struct {
 	APIKeyHandler      *handler.APIKeyHandler
 	CommunityHandler   *handler.CommunityHandler
 	WSHub              *ws.Hub
+	AllowedOrigins     []string
 }
 
 func NewRouter(deps RouterDeps) *chi.Mux {
@@ -40,7 +41,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	r.Use(chiMiddleware.RealIP)
 	r.Use(middleware.Security)
 	r.Use(middleware.Logging(deps.Logger))
-	r.Use(middleware.CORS("http://localhost:5173", "http://localhost:4173"))
+	r.Use(middleware.CORS(deps.AllowedOrigins...))
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(middleware.RateLimit(deps.RedisClient, 100, 1*time.Minute))
 

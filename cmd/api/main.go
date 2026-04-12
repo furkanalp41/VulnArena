@@ -76,7 +76,7 @@ func main() {
 	}
 
 	// WebSocket hub
-	wsHub := ws.NewHub(logger)
+	wsHub := ws.NewHub(logger, cfg.AllowedOrigins)
 	go wsHub.Run()
 
 	// Services
@@ -131,6 +131,7 @@ func main() {
 		APIKeyHandler:      apiKeyHandler,
 		CommunityHandler:   communityHandler,
 		WSHub:              wsHub,
+		AllowedOrigins:     cfg.AllowedOrigins,
 	})
 
 	// Start server

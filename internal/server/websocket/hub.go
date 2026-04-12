@@ -17,12 +17,15 @@ const (
 	maxMessageSize = 2048
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // permissive for dev; tighten in production
-	},
+func newUpgrader(allowedOrigins map[string]bool) websocket.Upgrader {
+	return websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			origin := r.Header.Get("Origin")
+			return allowedOrigins[origin]
+		},
+	}
 }
 
 // ----- Inbound message types (client → server) -----
@@ -69,16 +72,17 @@ type RoomJoin struct {
 
 // Hub maintains the set of active WebSocket clients and broadcasts messages.
 type Hub struct {
-	clients    map[*Client]bool
-	rooms      map[string]map[*Client]bool
-	broadcast  chan []byte
-	roomMsg    chan RoomMessage
-	register   chan *Client
-	unregister chan *Client
-	joinRoom   chan RoomJoin
-	leaveRoom  chan *Client
-	mu         sync.RWMutex
-	logger     *slog.Logger
+	clients        map[*Client]bool
+	rooms          map[string]map[*Client]bool
+	broadcast      chan []byte
+	roomMsg        chan RoomMessage
+	register       chan *Client
+	unregister     chan *Client
+	joinRoom       chan RoomJoin
+	leaveRoom      chan *Client
+	mu             sync.RWMutex
+	logger         *slog.Logger
+	allowedOrigins map[string]bool
 }
 
 // Client represents a single WebSocket connection.
@@ -93,17 +97,22 @@ type Client struct {
 }
 
 // NewHub creates a new Hub.
-func NewHub(logger *slog.Logger) *Hub {
+func NewHub(logger *slog.Logger, allowedOrigins []string) *Hub {
+	origins := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		origins[o] = true
+	}
 	return &Hub{
-		clients:    make(map[*Client]bool),
-		rooms:      make(map[string]map[*Client]bool),
-		broadcast:  make(chan []byte, 256),
-		roomMsg:    make(chan RoomMessage, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		joinRoom:   make(chan RoomJoin),
-		leaveRoom:  make(chan *Client),
-		logger:     logger,
+		clients:        make(map[*Client]bool),
+		rooms:          make(map[string]map[*Client]bool),
+		broadcast:      make(chan []byte, 256),
+		roomMsg:        make(chan RoomMessage, 256),
+		register:       make(chan *Client),
+		unregister:     make(chan *Client),
+		joinRoom:       make(chan RoomJoin),
+		leaveRoom:      make(chan *Client),
+		logger:         logger,
+		allowedOrigins: origins,
 	}
 }
 
@@ -338,8 +347,9 @@ func buildRoomEvent(eventType string, client *Client) []byte {
 
 // ServeWS handles WebSocket upgrade requests (unauthenticated, for global notifications).
 func ServeWS(hub *Hub) http.HandlerFunc {
+	up := newUpgrader(hub.allowedOrigins)
 	return func(w http.ResponseWriter, r *http.Request) {
-		conn, err := upgrader.Upgrade(w, r, nil)
+		conn, err := up.Upgrade(w, r, nil)
 		if err != nil {
 			hub.logger.Error("ws upgrade failed", slog.String("error", err.Error()))
 			return

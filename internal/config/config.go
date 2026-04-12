@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,7 @@ type Config struct {
 	JWT               JWTConfig
 	Anthropic         AnthropicConfig
 	DiscordWebhookURL string
+	AllowedOrigins    []string
 }
 
 type AnthropicConfig struct {
@@ -61,6 +63,10 @@ func Load() (*Config, error) {
 
 	// Discord webhook (optional — disabled if empty)
 	cfg.DiscordWebhookURL = getEnv("DISCORD_WEBHOOK_URL", "")
+
+	// CORS allowed origins
+	originsRaw := getEnv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:4173")
+	cfg.AllowedOrigins = strings.Split(originsRaw, ",")
 
 	return cfg, nil
 }

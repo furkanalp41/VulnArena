@@ -49,7 +49,8 @@ func ServeCollabWS(hub *Hub, authService *service.AuthService, teamService *serv
 			displayName = d
 		}
 
-		conn, err := upgrader.Upgrade(w, r, nil)
+		up := newUpgrader(hub.allowedOrigins)
+		conn, err := up.Upgrade(w, r, nil)
 		if err != nil {
 			hub.logger.Error("collab ws upgrade failed", slog.String("error", err.Error()))
 			return
