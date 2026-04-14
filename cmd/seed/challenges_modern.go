@@ -215,7 +215,7 @@ This exposes other users' email, billing info, and API keys. The nested resolver
 			"Look at the nested resolvers for billingInfo and apiKeys. Do they verify WHO is asking?",
 			"Try crafting a GraphQL query: user(id: \"someone-else\") { apiKeys { key } }",
 		},
-		vulnerableLines: []int{39, 40, 41, 42, 46, 47, 48, 50, 51, 52},
+		vulnerableLines: []int{39, 40, 42, 46, 48, 50, 52},
 		cveReference:    "",
 	}
 }
@@ -402,7 +402,7 @@ The vulnerability is on lines 13-22 where no key sanitization occurs before recu
 			"Think about what Object.prototype is. If you set a property on it, what objects are affected?",
 			"Check the admin endpoint — how does it determine if a user is an admin? Could you influence that check globally?",
 		},
-		vulnerableLines: []int{13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
+		vulnerableLines: []int{13, 14, 15, 16, 17, 19, 21},
 		cveReference:    "CVE-2019-10744",
 	}
 }
@@ -1052,7 +1052,7 @@ Once the attacker forges a token with "role": "admin", they can access /api/admi
 			"If the server uses the PUBLIC key for verification, what happens if an attacker signs a token with HS256 using that same public key?",
 			"Research the JWT 'alg: none' attack. What happens when a token has no signature and the server doesn't enforce the algorithm?",
 		},
-		vulnerableLines: []int{28, 29, 30, 31, 32},
+		vulnerableLines: []int{28, 29, 30, 31},
 		cveReference:    "CVE-2015-9235",
 	}
 }
@@ -1607,7 +1607,7 @@ The vulnerability is on lines 48 and 66 where req.body is spread without filteri
 			"The User schema has fields like 'role', 'isVerified', 'credits', and 'plan'. Can a user set these via the update endpoint?",
 			"Check the registration endpoint too. What does ...req.body do after the explicit destructuring?",
 		},
-		vulnerableLines: []int{46, 47, 48, 49, 50, 51, 64, 65, 66, 67},
+		vulnerableLines: []int{47, 48, 49, 50, 51, 64, 65, 66, 67},
 		cveReference:    "",
 	}
 }
@@ -2066,7 +2066,7 @@ if __name__ == "__main__":
 			"The validation checks if 'myapp.com' is IN the netloc string. Can you craft a domain where 'myapp.com' appears as a substring but points to an attacker-controlled server?",
 			"Even with state validation, the attacker can initiate the OAuth flow themselves. The state protects the victim from CSRF, but does it prevent the attacker from choosing where the code is sent?",
 		},
-		vulnerableLines: []int{24, 25, 26, 29, 30, 39, 64, 65, 66, 67},
+		vulnerableLines: []int{24, 25, 29, 30, 39, 64, 65, 66},
 		cveReference:    "",
 	}
 }
@@ -2614,7 +2614,7 @@ The pattern is consistent: all endpoints call db.Get*(id) using the user-supplie
 			"The user's workspace ID is in X-Workspace-ID header. Which endpoints verify that the requested resource belongs to that workspace?",
 			"BOLA isn't just about reading data. Look at updateTask and removeMember — an attacker can MODIFY resources in other workspaces. What's the impact?",
 		},
-		vulnerableLines: []int{48, 49, 50, 51, 62, 63, 79, 80, 99, 100, 101, 109, 110},
+		vulnerableLines: []int{49, 50, 51, 63, 80, 101, 110},
 		cveReference:    "",
 	}
 }
@@ -2773,7 +2773,7 @@ All these are amplified by the Cache-Control: public headers (lines 54, 67, 81) 
 			"Look at how req.baseUrl is constructed from X-Forwarded-Host. If an attacker sets this header to 'evil.com', what URLs end up in the cached HTML?",
 			"The response includes Cache-Control: public, max-age=3600. This means the CDN will serve the SAME response to ALL users for 1 hour. If that response was generated with the attacker's X-Forwarded-Host value, what do all users receive?",
 		},
-		vulnerableLines: []int{12, 13, 16, 25, 33, 34, 48, 50, 57, 64, 76, 84, 88, 89},
+		vulnerableLines: []int{13, 14, 16, 17, 33, 34, 35, 48, 50, 58, 76, 77, 85, 88, 89, 90},
 		cveReference:    "",
 	}
 }
