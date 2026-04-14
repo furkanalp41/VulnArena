@@ -77,6 +77,21 @@ export interface SubmitResult {
   bonus_xp?: number;
 }
 
+export interface RevealResult {
+  solution: {
+    target_vulnerability: string;
+    conceptual_fix: string;
+    vulnerable_lines: number[];
+  };
+  submission: {
+    id: string;
+    score: number;
+    is_correct: boolean;
+    created_at: string;
+  };
+  progress: UserProgress;
+}
+
 interface ChallengeListResponse {
   challenges: ChallengeListItem[] | null;
   total: number;
@@ -109,6 +124,12 @@ export async function listChallenges(params?: {
 
 export async function getChallenge(id: string): Promise<ChallengeDetailResponse> {
   return api<ChallengeDetailResponse>(`/arena/challenges/${id}`);
+}
+
+export async function revealSolution(challengeId: string): Promise<RevealResult> {
+  return api<RevealResult>(`/arena/challenges/${challengeId}/reveal`, {
+    method: 'POST',
+  });
 }
 
 export async function submitAnswer(

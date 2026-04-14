@@ -2,6 +2,14 @@ import { PUBLIC_API_URL } from '$env/static/public';
 import { auth } from '$lib/stores/auth';
 import { goto } from '$app/navigation';
 
+if (!PUBLIC_API_URL) {
+  throw new Error(
+    '[VulnArena] PUBLIC_API_URL is not set. ' +
+    'Set it in your environment (Vercel dashboard or .env.development locally). ' +
+    'Received: ' + JSON.stringify(PUBLIC_API_URL)
+  );
+}
+
 const API_BASE = PUBLIC_API_URL;
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {

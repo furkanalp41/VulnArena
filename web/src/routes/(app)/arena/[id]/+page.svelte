@@ -2,7 +2,7 @@
   import { page } from '$app/stores';
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
-  import { getChallenge, submitAnswer, type Challenge, type UserProgress, type EvaluationFeedback } from '$lib/api/arena';
+  import { getChallenge, submitAnswer, revealSolution, type Challenge, type UserProgress, type EvaluationFeedback, type RevealResult } from '$lib/api/arena';
   import { ApiError } from '$lib/api/client';
   import CodeEditor from '$lib/components/editor/CodeEditor.svelte';
   import Terminal from '$lib/components/ui/Terminal.svelte';
@@ -45,6 +45,12 @@
 
   // Hints state
   let hintsRevealed = $state(0);
+
+  // Reveal solution state
+  let showRevealConfirm = $state(false);
+  let solutionRevealed = $state(false);
+  let solutionData = $state<RevealResult['solution'] | null>(null);
+  let revealing = $state(false);
 
   // Panel state
   let activeTab = $state<'brief' | 'submit' | 'results'>('brief');
@@ -139,10 +145,13 @@
   }
 
   function addLineFromInput() {
-    const nums = lineInput
+    // Strip brackets and other non-numeric delimiters, then parse
+    const cleaned = lineInput.replace(/[\[\](){}]/g, '');
+    const maxLine = challenge?.line_count ?? Infinity;
+    const nums = cleaned
       .split(/[,\s]+/)
       .map(s => parseInt(s.trim(), 10))
-      .filter(n => !isNaN(n) && n > 0);
+      .filter(n => !isNaN(n) && n > 0 && n <= maxLine);
     const unique = [...new Set([...targetLines, ...nums])].sort((a, b) => a - b);
     targetLines = unique;
     lineInput = '';
@@ -202,6 +211,21 @@
   function revealHint() {
     if (challenge && hintsRevealed < challenge.hints.length) {
       hintsRevealed++;
+    }
+  }
+
+  async function handleRevealSolution() {
+    revealing = true;
+    try {
+      const result = await revealSolution(challengeId);
+      solutionData = result.solution;
+      solutionRevealed = true;
+      progress = result.progress;
+      showRevealConfirm = false;
+    } catch (e) {
+      submitError = e instanceof ApiError ? e.message : 'Failed to reveal solution.';
+    } finally {
+      revealing = false;
     }
   }
 
@@ -355,6 +379,39 @@
                 </div>
               {/if}
 
+              <!-- Reveal Solution -->
+              {#if solutionRevealed && solutionData}
+                <div class="solution-section">
+                  <h3 class="section-label">Solution (Revealed)</h3>
+                  <div class="solution-card">
+                    <div class="solution-block">
+                      <span class="solution-label">Vulnerability</span>
+                      <p>{solutionData.target_vulnerability}</p>
+                    </div>
+                    <div class="solution-block">
+                      <span class="solution-label">Conceptual Fix</span>
+                      <p>{solutionData.conceptual_fix}</p>
+                    </div>
+                    {#if solutionData.vulnerable_lines?.length > 0}
+                      <div class="solution-block">
+                        <span class="solution-label">Vulnerable Lines</span>
+                        <div class="solution-lines font-mono">
+                          {solutionData.vulnerable_lines.join(', ')}
+                        </div>
+                      </div>
+                    {/if}
+                    <p class="solution-warning">Points for this challenge have been set to 0.</p>
+                  </div>
+                </div>
+              {:else if !solutionRevealed}
+                <div class="reveal-section">
+                  <Button variant="danger" size="sm" onclick={() => showRevealConfirm = true}>
+                    Reveal Solution
+                  </Button>
+                  <span class="reveal-note">Warning: this sets your score to 0 for this challenge.</span>
+                </div>
+              {/if}
+
               <div class="how-to-section">
                 <h3 class="section-label">How to Audit</h3>
                 <ol class="how-to-list">
@@ -505,6 +562,31 @@
         </div>
       </div>
     </div>
+
+    <!-- Reveal Confirmation Modal -->
+    {#if showRevealConfirm}
+      <div class="modal-overlay" onclick={() => showRevealConfirm = false}>
+        <div class="modal-box" onclick={(e) => e.stopPropagation()}>
+          <h3 class="modal-title">Reveal Solution?</h3>
+          <p class="modal-text">
+            This will show the full solution including the vulnerability description,
+            correct line numbers, and conceptual fix.
+          </p>
+          <p class="modal-warning">
+            Your score for this challenge will be permanently set to 0.
+            You will not earn leaderboard points for this challenge.
+          </p>
+          <div class="modal-actions">
+            <Button variant="ghost" size="sm" onclick={() => showRevealConfirm = false} disabled={revealing}>
+              Cancel
+            </Button>
+            <Button variant="danger" size="sm" onclick={handleRevealSolution} loading={revealing} disabled={revealing}>
+              {revealing ? 'Revealing...' : 'Confirm Reveal'}
+            </Button>
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 {/if}
 
@@ -1159,6 +1241,126 @@
     background: var(--accent-blue-glow);
     border-color: var(--accent-blue-glow);
     color: var(--accent-blue);
+  }
+
+  /* Reveal Solution */
+  .reveal-section {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-primary);
+  }
+
+  .reveal-note {
+    font-size: 0.625rem;
+    color: var(--text-tertiary);
+    line-height: 1.4;
+  }
+
+  .solution-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .solution-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3);
+    background: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    border-left: 3px solid var(--accent-red);
+  }
+
+  .solution-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .solution-label {
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: var(--accent-red);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .solution-card p {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .solution-lines {
+    font-size: 0.8125rem;
+    color: var(--accent-yellow);
+    letter-spacing: 0.02em;
+  }
+
+  .solution-warning {
+    font-size: 0.6875rem;
+    color: var(--accent-red);
+    font-style: italic;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal-box {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    padding: var(--space-6);
+    max-width: 420px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .modal-title {
+    font-family: var(--font-serif);
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .modal-text {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .modal-warning {
+    font-size: 0.8125rem;
+    color: var(--accent-red);
+    line-height: 1.5;
+    padding: var(--space-2) var(--space-3);
+    background: var(--accent-red-glow);
+    border-radius: var(--radius-sm);
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
   }
 
   /* Terminal */

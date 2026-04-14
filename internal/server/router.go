@@ -114,6 +114,7 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.AuditLog(deps.Logger, "arena"))
 				r.Post("/arena/challenges/{id}/submit", deps.ArenaHandler.SubmitAnswer)
+				r.Post("/arena/challenges/{id}/reveal", deps.ArenaHandler.RevealSolution)
 			})
 			r.Get("/arena/challenges/{id}/submissions", deps.ArenaHandler.GetSubmissionHistory)
 

@@ -134,6 +134,29 @@ func (h *ArenaHandler) SubmitAnswer(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (h *ArenaHandler) RevealSolution(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == uuid.Nil {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	challengeID, err := uuid.Parse(idStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid challenge ID")
+		return
+	}
+
+	result, err := h.arenaService.RevealSolution(r.Context(), userID, challengeID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to reveal solution")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}
+
 func (h *ArenaHandler) GetSubmissionHistory(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 	if userID == uuid.Nil {

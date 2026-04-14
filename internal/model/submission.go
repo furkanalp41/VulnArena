@@ -29,9 +29,17 @@ type EvaluationFeedback struct {
 	LineAccuracy       float64  `json:"line_accuracy"`
 	OverallScore       float64  `json:"overall_score"`
 	Passed             bool     `json:"passed"`
+	IsRevealed         bool     `json:"is_revealed,omitempty"`
 	TerminalLog        []string `json:"terminal_log"`
 	MatchedVulnTerms   []string `json:"matched_vuln_terms,omitempty"`
 	MatchedFixTerms    []string `json:"matched_fix_terms,omitempty"`
+}
+
+// RevealResult holds the solution data returned when a user reveals a challenge.
+type RevealResult struct {
+	TargetVulnerability string `json:"target_vulnerability"`
+	ConceptualFix       string `json:"conceptual_fix"`
+	VulnerableLines     []int  `json:"vulnerable_lines"`
 }
 
 type UserChallengeProgress struct {

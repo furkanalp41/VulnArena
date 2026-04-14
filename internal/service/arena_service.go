@@ -215,3 +215,76 @@ func (s *ArenaService) GetUserProgress(ctx context.Context, userID, challengeID 
 func (s *ArenaService) GetSubmissionHistory(ctx context.Context, userID, challengeID uuid.UUID) ([]model.Submission, error) {
 	return s.submissionRepo.ListByUserAndChallenge(ctx, userID, challengeID)
 }
+
+// RevealSolutionResult contains the solution data plus a 0-score submission record.
+type RevealSolutionResult struct {
+	Solution   *model.RevealResult            `json:"solution"`
+	Submission *model.Submission              `json:"submission"`
+	Progress   *model.UserChallengeProgress   `json:"progress"`
+}
+
+// RevealSolution exposes the challenge's solution to the user.
+// It creates a 0-score submission to record the reveal and prevent leaderboard gaming.
+func (s *ArenaService) RevealSolution(ctx context.Context, userID, challengeID uuid.UUID) (*RevealSolutionResult, error) {
+	ch, err := s.challengeRepo.GetByID(ctx, challengeID)
+	if err != nil {
+		return nil, fmt.Errorf("challenge not found: %w", err)
+	}
+
+	// Build revealed feedback
+	feedback := &model.EvaluationFeedback{
+		IsRevealed: true,
+		TerminalLog: []string{
+			"> Solution revealed by operator.",
+			"> Points for this challenge set to 0.",
+			"> STATUS: REVEALED — No points awarded.",
+		},
+	}
+
+	feedbackJSON, err := json.Marshal(feedback)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling feedback: %w", err)
+	}
+
+	sub := &model.Submission{
+		ID:          uuid.New(),
+		UserID:      userID,
+		ChallengeID: challengeID,
+		AnswerText:  "[Solution Revealed]",
+		Score:       0,
+		IsCorrect:   false,
+		Feedback:    feedbackJSON,
+	}
+
+	if err := s.submissionRepo.Create(ctx, sub); err != nil {
+		return nil, fmt.Errorf("saving reveal submission: %w", err)
+	}
+
+	// Update progress with 0 score (won't overwrite a better existing score)
+	if err := s.submissionRepo.UpsertProgress(ctx, userID, challengeID, 0, false); err != nil {
+		return nil, fmt.Errorf("updating progress: %w", err)
+	}
+
+	progress, err := s.submissionRepo.GetProgress(ctx, userID, challengeID)
+	if err != nil {
+		return nil, fmt.Errorf("getting progress: %w", err)
+	}
+
+	s.logger.Info("audit_event",
+		slog.String("log_type", "audit"),
+		slog.String("category", "solution_revealed"),
+		slog.String("user_id", userID.String()),
+		slog.String("challenge_id", challengeID.String()),
+		slog.String("challenge_title", ch.Title),
+	)
+
+	return &RevealSolutionResult{
+		Solution: &model.RevealResult{
+			TargetVulnerability: ch.TargetVulnerability,
+			ConceptualFix:       ch.ConceptualFix,
+			VulnerableLines:     ch.VulnerableLines,
+		},
+		Submission: sub,
+		Progress:   progress,
+	}, nil
+}

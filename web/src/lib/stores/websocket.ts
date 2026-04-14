@@ -6,6 +6,13 @@ export interface WSEvent {
   [key: string]: string;
 }
 
+if (!PUBLIC_API_URL) {
+  throw new Error(
+    '[VulnArena] PUBLIC_API_URL is not set for WebSocket. ' +
+    'Received: ' + JSON.stringify(PUBLIC_API_URL)
+  );
+}
+
 function getWsUrl(path: string): string {
   return PUBLIC_API_URL.replace(/^http/, 'ws') + path;
 }

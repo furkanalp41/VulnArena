@@ -82,20 +82,37 @@ func (e *LLMEvaluator) Evaluate(ctx context.Context, req EvaluationRequest) (*Ev
 	hasLineTargeting := len(req.VulnerableLines) > 0
 	if hasLineTargeting && len(req.UserTargetLines) > 0 {
 		logf("> Line targeting: user flagged %d line(s), ground truth has %d", len(req.UserTargetLines), len(req.VulnerableLines))
-		hits := 0
+
+		// Build truth set for fast lookup
 		truthSet := make(map[int]bool, len(req.VulnerableLines))
 		for _, l := range req.VulnerableLines {
 			truthSet[l] = true
 		}
+
+		// Track which truth lines have been claimed to prevent double-matching.
+		// Each truth line can only be "hit" once even if multiple user lines
+		// fall within its ±2 tolerance window.
+		claimedTruth := make(map[int]bool, len(req.VulnerableLines))
+		hits := 0
+
 		for _, ul := range req.UserTargetLines {
-			// Allow ±2 line tolerance for minor off-by-one
-			if truthSet[ul] || truthSet[ul-1] || truthSet[ul+1] || truthSet[ul-2] || truthSet[ul+2] {
-				hits++
-				logf("  [+] Line %d — HIT (matches vulnerable region)", ul)
-			} else {
+			matched := false
+			// Check ±2 tolerance, prefer exact match first
+			for _, offset := range []int{0, -1, 1, -2, 2} {
+				candidate := ul + offset
+				if truthSet[candidate] && !claimedTruth[candidate] {
+					claimedTruth[candidate] = true
+					hits++
+					matched = true
+					logf("  [+] Line %d — HIT (matches vulnerable line %d)", ul, candidate)
+					break
+				}
+			}
+			if !matched {
 				logf("  [-] Line %d — MISS", ul)
 			}
 		}
+
 		precision := float64(hits) / float64(len(req.UserTargetLines))
 		recall := float64(hits) / float64(len(req.VulnerableLines))
 		if precision+recall > 0 {

@@ -155,6 +155,16 @@ func ensureExtraLookups(ctx context.Context, pool *pgxpool.Pool) {
 		{"prototype-pollution", "Prototype Pollution", "Manipulating JavaScript object prototypes to inject properties.", "A08:2021"},
 		{"logic-flaw", "Logic Flaw / Business Logic", "Flaws in application logic allowing unintended behavior.", ""},
 		{"auth-bypass", "Authentication Bypass", "Circumventing authentication mechanisms to gain unauthorized access.", "A07:2021"},
+		{"llm-injection", "LLM / AI Prompt Injection", "Injecting adversarial prompts to manipulate LLM behavior and exfiltrate data.", ""},
+		{"xxe", "XML External Entity (XXE)", "Exploiting XML parsers to read files, perform SSRF, or execute remote code.", "A05:2021"},
+		{"ssti", "Server-Side Template Injection", "Injecting template directives into server-side template engines to achieve RCE.", "A03:2021"},
+		{"ci-cd-injection", "CI/CD Pipeline Injection", "Injecting malicious commands into CI/CD pipeline configurations.", ""},
+		{"dom-clobbering", "DOM Clobbering", "Overwriting DOM properties via HTML injection to hijack client-side logic.", "A03:2021"},
+		{"request-smuggling", "HTTP Request Smuggling", "Exploiting discrepancies in HTTP parsing between front-end and back-end servers.", ""},
+		{"mass-assignment", "Mass Assignment", "Binding user-controlled input to internal object fields without whitelisting.", "A04:2021"},
+		{"redos", "ReDoS", "Crafting input that causes catastrophic backtracking in regular expressions.", ""},
+		{"path-traversal", "Path Traversal", "Accessing files outside intended directories via directory traversal sequences.", "A01:2021"},
+		{"cache-poisoning", "Web Cache Poisoning", "Manipulating cache keys to serve malicious content to other users.", ""},
 	}
 	for _, c := range cats {
 		var owasp *string
@@ -177,7 +187,8 @@ func buildChallenges() []challengeSeed {
 		challenge5_RustMemory(),
 		challenge6_CppRCE(),
 	}
-	return append(base, buildCVEChallenges()...)
+	all := append(base, buildCVEChallenges()...)
+	return append(all, buildModernChallenges()...)
 }
 
 // ──────────────────────────────────────────────────
