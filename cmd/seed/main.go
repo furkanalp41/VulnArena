@@ -903,7 +903,7 @@ func challenge5_RustMemory() challengeSeed {
 		catSlug:      "memory-corruption",
 		points:       500,
 		cveReference: "CVE-2022-21658 (unsafe memory pattern in Rust)",
-		vulnerableLines: []int{62, 63, 64, 65, 95, 96, 97, 98, 99, 100, 101, 102},
+		vulnerableLines: []int{63, 64, 65, 95, 96, 98, 99, 103, 104},
 		description: `A high-performance Rust cache server uses unsafe code blocks to achieve
 zero-copy deserialization and manual memory management for hot-path
 optimization. The service handles ~100K requests/second and any latency
@@ -1147,7 +1147,7 @@ func challenge6_CppRCE() challengeSeed {
 		catSlug:      "insecure-deser",
 		points:       800,
 		cveReference: "CVE-2021-22555 (type confusion / object lifecycle pattern)",
-		vulnerableLines: []int{89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 111, 112, 113, 114, 115, 116, 117},
+		vulnerableLines: []int{91, 92, 93, 94, 95, 98, 111, 113, 114, 115, 116},
 		description: `A C++ application server implements a plugin system that loads and
 executes user-uploaded "analysis modules." The modules are serialized C++
 objects transmitted over a custom binary protocol. The server deserializes

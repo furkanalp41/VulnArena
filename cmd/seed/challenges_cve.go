@@ -201,7 +201,7 @@ func cveStrutsOGNL() challengeSeed {
 			"The error message includes the raw Content-Type value — what does the framework do with error messages?",
 			"OGNL expressions like %{...} in Struts error messages get evaluated by the expression engine.",
 		},
-		vulnerableLines: []int{28, 29, 30, 31, 32, 33},
+		vulnerableLines: []int{28, 29, 30, 31, 32},
 		code: `import com.opensymphony.xwork2.ActionSupport;
 import org.apache.struts2.dispatcher.multipart.MultiPartRequest;
 import org.apache.struts2.interceptor.ServletRequestAware;
@@ -289,7 +289,7 @@ func cveShellshock() challengeSeed {
 			"How does Bash handle environment variables that start with '() {'?",
 			"The User-Agent is set as an env var before spawning bash — research CVE-2014-6271.",
 		},
-		vulnerableLines: []int{25, 26, 27, 28, 29, 30},
+		vulnerableLines: []int{25, 26, 31},
 		code: `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -355,7 +355,7 @@ func cveRustUnsafeUAF() challengeSeed {
 			"What happens to 'conn_ptr' after release_connection is called?",
 			"After release, the connection is back in the pool — but the caller still holds a raw pointer to it.",
 		},
-		vulnerableLines: []int{38, 39, 40, 55, 56, 57, 58},
+		vulnerableLines: []int{38, 39, 40, 55},
 		code: `use std::collections::VecDeque;
 use std::ptr;
 
@@ -542,7 +542,7 @@ func cvePrototypePollution() challengeSeed {
 			"What happens if the user sends a JSON body with '__proto__' as a key?",
 			"How does modifying Object.prototype affect the 'isAdmin' property check on other objects?",
 		},
-		vulnerableLines: []int{8, 9, 10, 11, 12, 13, 14, 15},
+		vulnerableLines: []int{8, 9, 10, 11, 12, 14},
 		code: `const express = require('express');
 const app = express();
 app.use(express.json());
@@ -614,7 +614,7 @@ func cvePHPSQLi() challengeSeed {
 			"PDO supports parameterized queries, but is this code using them?",
 			"The $username variable is concatenated directly into the SQL string.",
 		},
-		vulnerableLines: []int{24, 25, 26},
+		vulnerableLines: []int{25, 26},
 		code: `<?php
 require_once __DIR__ . '/config/database.php';
 
@@ -696,7 +696,7 @@ func cvePythonPickle() challengeSeed {
 			"Python's pickle module can instantiate arbitrary objects during deserialization.",
 			"What if an attacker can write to the cache backend directly?",
 		},
-		vulnerableLines: []int{28, 29, 42, 43},
+		vulnerableLines: []int{28, 29, 43},
 		code: `import pickle
 import redis
 import hashlib
@@ -779,7 +779,7 @@ func cveRubyERBSSTI() challengeSeed {
 			"What happens when ERB processes a string containing '<%= ... %>'?",
 			"The template variable is constructed from user input and rendered via ERB.new().result.",
 		},
-		vulnerableLines: []int{30, 31, 32, 33},
+		vulnerableLines: []int{30, 33},
 		code: `require 'sinatra'
 require 'erb'
 require 'cgi'
@@ -849,7 +849,7 @@ func cveCSharpXXE() challengeSeed {
 			"What does the XmlResolver property control?",
 			"An XML document with a <!DOCTYPE> containing ENTITY declarations can read local files.",
 		},
-		vulnerableLines: []int{26, 27, 28, 29},
+		vulnerableLines: []int{26, 27, 28},
 		code: `using System;
 using System.Xml;
 using System.IO;
@@ -927,7 +927,7 @@ func cveGoSSRF() challengeSeed {
 			"Can the user specify URLs pointing to localhost, 169.254.169.254, or internal IPs?",
 			"The http.Get() call follows redirects — even if the initial URL looks safe, a redirect could go to an internal address.",
 		},
-		vulnerableLines: []int{29, 30, 31, 32, 33, 34, 35},
+		vulnerableLines: []int{33, 34},
 		code: `package main
 
 import (
@@ -1181,7 +1181,7 @@ func cveCppUAFVector() challengeSeed {
 			"std::vector may reallocate when push_back is called — what happens to existing references?",
 			"The 'session' reference on line 43 may become dangling after add_session modifies the vector.",
 		},
-		vulnerableLines: []int{27, 28, 43, 44, 45, 46, 47},
+		vulnerableLines: []int{27, 28, 45, 46},
 		code: `#include <iostream>
 #include <vector>
 #include <string>
@@ -1274,7 +1274,7 @@ func cveJavaDeserGadget() challengeSeed {
 			"ObjectInputStream.readObject() will instantiate any Serializable class on the classpath.",
 			"Research 'Apache Commons Collections gadget chain' and how it enables RCE via deserialization.",
 		},
-		vulnerableLines: []int{36, 37, 38, 39, 40, 41},
+		vulnerableLines: []int{38, 39, 41},
 		code: `import java.io.*;
 import java.net.*;
 import java.util.logging.Logger;
@@ -1362,7 +1362,7 @@ func cvePythonCmdInjection() challengeSeed {
 			"What happens when the hostname contains shell metacharacters like ';' or '&&'?",
 			"The shell=True argument means the command string is interpreted by /bin/sh.",
 		},
-		vulnerableLines: []int{19, 20, 21, 22},
+		vulnerableLines: []int{20, 21, 22},
 		code: `from flask import Flask, request, jsonify
 import subprocess
 import re
@@ -1440,7 +1440,7 @@ func cvePHPFileInclusion() challengeSeed {
 			"What about double-encoding, URL encoding, or null bytes in the path?",
 			"The str_replace only catches literal '../' — what about '..\\' or '....//`?",
 		},
-		vulnerableLines: []int{18, 19, 20, 21, 25},
+		vulnerableLines: []int{21, 23},
 		code: `<?php
 session_start();
 
@@ -1504,7 +1504,7 @@ func cveRustRaceCondition() challengeSeed {
 			"Is the balance check and the balance update performed while holding the same lock?",
 			"What happens if two transfers from the same account execute the balance check simultaneously?",
 		},
-		vulnerableLines: []int{30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42},
+		vulnerableLines: []int{32, 33, 35, 36, 40, 41, 44, 45},
 		code: `use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -1596,7 +1596,7 @@ func cveJWTNoneBypass() challengeSeed {
 			"What happens if the JWT header specifies 'alg': 'none'?",
 			"Some JWT libraries accept 'none' as a valid algorithm if not explicitly excluded.",
 		},
-		vulnerableLines: []int{18, 19, 20},
+		vulnerableLines: []int{22},
 		code: `const express = require('express');
 const jwt = require('jsonwebtoken');
 
@@ -1688,7 +1688,7 @@ func cveGoPathTraversal() challengeSeed {
 			"Does filepath.Join() prevent path traversal with '../' sequences?",
 			"What validation ensures the resolved path stays within the upload directory?",
 		},
-		vulnerableLines: []int{28, 29, 30, 31},
+		vulnerableLines: []int{31},
 		code: `package main
 
 import (
@@ -1780,7 +1780,7 @@ func cveCSharpBinaryFormatter() challengeSeed {
 			"BinaryFormatter is known to be dangerous with untrusted data — why?",
 			"Microsoft has explicitly deprecated BinaryFormatter due to deserialization vulnerabilities.",
 		},
-		vulnerableLines: []int{34, 35, 36, 37, 38},
+		vulnerableLines: []int{34, 36, 37},
 		code: `using System;
 using System.IO;
 using System.Net;
@@ -1882,7 +1882,7 @@ func cvePythonSSRF() challengeSeed {
 			"The scheme check allows http/https — but what about the host? Can it be 169.254.169.254?",
 			"The requests library follows redirects by default — a safe-looking URL could redirect to an internal one.",
 		},
-		vulnerableLines: []int{24, 25, 26, 27, 28, 29, 30},
+		vulnerableLines: []int{24, 28, 29},
 		code: `from flask import Flask, request, jsonify
 import requests
 from bs4 import BeautifulSoup
@@ -1955,7 +1955,7 @@ func cveCIntegerOverflow() challengeSeed {
 			"What happens if width=65536, height=65536, bpp=4? Does the multiplication overflow a uint32?",
 			"The allocation uses the overflowed (small) value, but the copy uses the real dimensions.",
 		},
-		vulnerableLines: []int{28, 29, 30, 31, 32, 33},
+		vulnerableLines: []int{32, 33},
 		code: `#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
