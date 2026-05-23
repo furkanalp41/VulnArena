@@ -98,16 +98,18 @@
       <div class="form-left">
         <Card>
           <div class="card-inner">
-            <label class="form-label">Title</label>
+            <label class="form-label" for="forge-title">Title</label>
             <input
+              id="forge-title"
               type="text"
               class="form-input"
               placeholder="e.g., Unsafe SQL Query Builder"
               bind:value={form.title}
             />
 
-            <label class="form-label">Description</label>
+            <label class="form-label" for="forge-description">Description</label>
             <textarea
+              id="forge-description"
               class="form-textarea"
               placeholder="Describe the scenario and what makes this code vulnerable..."
               bind:value={form.description}
@@ -116,8 +118,8 @@
 
             <div class="form-row">
               <div class="form-field">
-                <label class="form-label">Language</label>
-                <select class="form-select" bind:value={form.language_slug}>
+                <label class="form-label" for="forge-language">Language</label>
+                <select id="forge-language" class="form-select" bind:value={form.language_slug}>
                   <option value="">Select...</option>
                   {#each languages as lang}
                     <option value={lang.slug}>{lang.name}</option>
@@ -125,8 +127,8 @@
                 </select>
               </div>
               <div class="form-field">
-                <label class="form-label">Vulnerability type</label>
-                <select class="form-select" bind:value={form.vuln_category_slug}>
+                <label class="form-label" for="forge-vulncat">Vulnerability type</label>
+                <select id="forge-vulncat" class="form-select" bind:value={form.vuln_category_slug}>
                   <option value="">Select...</option>
                   {#each vulnCategories as cat}
                     <option value={cat.slug}>{cat.name}</option>
@@ -137,8 +139,9 @@
 
             <div class="form-row">
               <div class="form-field">
-                <label class="form-label">Difficulty (1-10)</label>
+                <label class="form-label" for="forge-difficulty">Difficulty (1-10)</label>
                 <input
+                  id="forge-difficulty"
                   type="range"
                   min="1"
                   max="10"
@@ -148,8 +151,9 @@
                 <span class="range-val">{form.difficulty}</span>
               </div>
               <div class="form-field">
-                <label class="form-label">Points</label>
+                <label class="form-label" for="forge-points">Points</label>
                 <input
+                  id="forge-points"
                   type="number"
                   class="form-input"
                   min="50"
@@ -160,16 +164,18 @@
               </div>
             </div>
 
-            <label class="form-label">Vulnerable code</label>
+            <label class="form-label" for="forge-code">Vulnerable code</label>
             <textarea
+              id="forge-code"
               class="form-textarea code-textarea font-mono"
               placeholder="Paste your vulnerable code snippet here..."
               bind:value={form.vulnerable_code}
               rows="14"
             ></textarea>
 
-            <label class="form-label">Vulnerable lines (comma-separated)</label>
+            <label class="form-label" for="forge-vuln-lines">Vulnerable lines (comma-separated)</label>
             <input
+              id="forge-vuln-lines"
               type="text"
               class="form-input"
               placeholder="e.g., 12, 15, 23-25"
@@ -183,23 +189,25 @@
       <div class="form-right">
         <Card>
           <div class="card-inner">
-            <label class="form-label">Target vulnerability</label>
+            <label class="form-label" for="forge-target">Target vulnerability</label>
             <textarea
+              id="forge-target"
               class="form-textarea"
               placeholder="Describe the vulnerability: what it is, how it can be exploited..."
               bind:value={form.target_vulnerability}
               rows="5"
             ></textarea>
 
-            <label class="form-label">Conceptual fix</label>
+            <label class="form-label" for="forge-fix">Conceptual fix</label>
             <textarea
+              id="forge-fix"
               class="form-textarea"
               placeholder="Describe how to fix the vulnerability..."
               bind:value={form.conceptual_fix}
               rows="5"
             ></textarea>
 
-            <label class="form-label">Hints</label>
+            <label class="form-label" for="forge-hint-input">Hints</label>
             <div class="hints-area">
               {#each form.hints as hint, i}
                 <div class="hint-row">
@@ -210,6 +218,7 @@
               {/each}
               <div class="hint-input-row">
                 <input
+                  id="forge-hint-input"
                   type="text"
                   class="form-input"
                   placeholder="Add a hint..."
@@ -225,7 +234,7 @@
         {#if form.vulnerable_code && form.language_slug}
           <Card>
             <div class="card-inner">
-              <label class="form-label">Preview</label>
+              <label class="form-label" for="forge-preview">Preview</label>
               <div class="preview-editor">
                 <CodeEditor
                   code={form.vulnerable_code}

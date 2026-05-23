@@ -565,9 +565,24 @@
 
     <!-- Reveal Confirmation Modal -->
     {#if showRevealConfirm}
-      <div class="modal-overlay" onclick={() => showRevealConfirm = false}>
-        <div class="modal-box" onclick={(e) => e.stopPropagation()}>
-          <h3 class="modal-title">Reveal Solution?</h3>
+      <div
+        class="modal-overlay"
+        role="button"
+        tabindex="-1"
+        aria-label="Close confirmation dialog"
+        onclick={() => showRevealConfirm = false}
+        onkeydown={(e) => { if (e.key === 'Escape') showRevealConfirm = false; }}
+      >
+        <div
+          class="modal-box"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reveal-modal-title"
+          tabindex="-1"
+          onclick={(e) => e.stopPropagation()}
+          onkeydown={(e) => e.stopPropagation()}
+        >
+          <h3 id="reveal-modal-title" class="modal-title">Reveal Solution?</h3>
           <p class="modal-text">
             This will show the full solution including the vulnerability description,
             correct line numbers, and conceptual fix.

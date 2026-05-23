@@ -141,9 +141,9 @@
 
     <!-- Tags -->
     <div class="field">
-      <label class="field-label font-mono">TAGS</label>
+      <label class="field-label font-mono" for="lesson-tag-input">TAGS</label>
       <div class="tags-input-row">
-        <input type="text" class="field-input" bind:value={tagInput} placeholder="Add a tag..." onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} />
+        <input id="lesson-tag-input" type="text" class="field-input" bind:value={tagInput} placeholder="Add a tag..." onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addTag(); } }} />
         <button type="button" class="tag-add-btn font-mono" onclick={addTag}>+ADD</button>
       </div>
       {#if form.tags.length > 0}
@@ -161,7 +161,7 @@
     <!-- Markdown Editor + Preview -->
     <div class="field">
       <div class="editor-header">
-        <label class="field-label font-mono">REPORT CONTENT (MARKDOWN)</label>
+        <label class="field-label font-mono" for="lesson-content">REPORT CONTENT (MARKDOWN)</label>
         <button type="button" class="preview-toggle font-mono" onclick={() => showPreview = !showPreview}>
           {showPreview ? 'EDIT' : 'PREVIEW'}
         </button>
@@ -173,6 +173,7 @@
         </div>
       {:else}
         <textarea
+          id="lesson-content"
           class="field-textarea content-area"
           rows="20"
           bind:value={form.content}

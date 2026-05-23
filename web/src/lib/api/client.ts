@@ -1,16 +1,11 @@
-import { PUBLIC_API_URL } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 import { auth } from '$lib/stores/auth';
 import { goto } from '$app/navigation';
 
-if (!PUBLIC_API_URL) {
-  throw new Error(
-    '[VulnArena] PUBLIC_API_URL is not set. ' +
-    'Set it in your environment (Vercel dashboard or .env.development locally). ' +
-    'Received: ' + JSON.stringify(PUBLIC_API_URL)
-  );
-}
-
-const API_BASE = PUBLIC_API_URL;
+// Same-origin default for production deployments behind a reverse proxy
+// (nginx routes /api/v1/* to the Go API). Dev overrides via web/.env:
+//   PUBLIC_API_URL=http://localhost:8080/api/v1
+const API_BASE = env.PUBLIC_API_URL || '/api/v1';
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;

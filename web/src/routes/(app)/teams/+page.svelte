@@ -77,12 +77,13 @@
       <Card variant="elevated" padding="lg">
         <div class="create-form">
           <div class="form-row">
-            <label class="form-label">Team name</label>
-            <input class="form-input" bind:value={formName} placeholder="Shadow Collective" maxlength="100" />
+            <label class="form-label" for="team-name">Team name</label>
+            <input id="team-name" class="form-input" bind:value={formName} placeholder="Shadow Collective" maxlength="100" />
           </div>
           <div class="form-row">
-            <label class="form-label">Tag (2-4 chars)</label>
+            <label class="form-label" for="team-tag">Tag (2-4 chars)</label>
             <input
+              id="team-tag"
               class="form-input tag-input"
               bind:value={formTag}
               placeholder="R00T"
@@ -91,8 +92,8 @@
             />
           </div>
           <div class="form-row">
-            <label class="form-label">Description</label>
-            <textarea class="form-input" bind:value={formDesc} placeholder="Team bio..." rows="3"></textarea>
+            <label class="form-label" for="team-desc">Description</label>
+            <textarea id="team-desc" class="form-input" bind:value={formDesc} placeholder="Team bio..." rows="3"></textarea>
           </div>
           {#if createError}
             <div class="form-error">{createError}</div>

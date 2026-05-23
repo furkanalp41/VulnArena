@@ -1,20 +1,27 @@
 import { writable } from 'svelte/store';
-import { PUBLIC_API_URL } from '$env/static/public';
+import { env } from '$env/dynamic/public';
 
 export interface WSEvent {
   type: string;
   [key: string]: string;
 }
 
-if (!PUBLIC_API_URL) {
-  throw new Error(
-    '[VulnArena] PUBLIC_API_URL is not set for WebSocket. ' +
-    'Received: ' + JSON.stringify(PUBLIC_API_URL)
-  );
-}
-
+// Resolve the WebSocket URL from PUBLIC_API_URL with a sane same-origin
+// fallback. PUBLIC_API_URL may be:
+//   - absolute (dev: "http://localhost:8080/api/v1") — replace scheme http→ws
+//   - relative or empty (prod default "/api/v1") — derive ws(s):// + host
+//     from window.location so the browser opens wss://vulnarena.com/api/v1/ws
 function getWsUrl(path: string): string {
-  return PUBLIC_API_URL.replace(/^http/, 'ws') + path;
+  const base = env.PUBLIC_API_URL || '/api/v1';
+  if (/^https?:\/\//i.test(base)) {
+    return base.replace(/^http/i, 'ws') + path;
+  }
+  if (typeof window !== 'undefined') {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${proto}//${window.location.host}${base}${path}`;
+  }
+  // SSR fallback — WebSocket isn't opened server-side, but keep it typed.
+  return base + path;
 }
 
 const WS_URL = getWsUrl('/ws');

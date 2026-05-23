@@ -174,9 +174,9 @@
 
     <!-- Hints -->
     <div class="field">
-      <label class="field-label font-mono">HINTS</label>
+      <label class="field-label font-mono" for="challenge-hint-input">HINTS</label>
       <div class="hints-input-row">
-        <input type="text" class="field-input" bind:value={hintInput} placeholder="Add a hint..." onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addHint(); } }} />
+        <input id="challenge-hint-input" type="text" class="field-input" bind:value={hintInput} placeholder="Add a hint..." onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addHint(); } }} />
         <button type="button" class="hint-add-btn font-mono" onclick={addHint}>+ADD</button>
       </div>
       {#if form.hints.length > 0}
