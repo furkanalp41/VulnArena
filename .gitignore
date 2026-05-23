@@ -9,6 +9,12 @@ bin/
 *.out
 vendor/
 
+# Stray binaries built at repo root
+/api
+/seed
+/migrate
+/vulnarena
+
 # Environment
 .env
 .env.local

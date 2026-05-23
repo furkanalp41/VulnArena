@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -16,7 +17,26 @@ import (
 )
 
 func main() {
+	var verifyOnly bool
+	var verbose bool
+	flag.BoolVar(&verifyOnly, "verify", false, "Verify VulnerableLines for every challenge and exit (no DB writes)")
+	flag.BoolVar(&verbose, "v", false, "Print every matched vulnerable line during verification")
+	flag.Parse()
+
 	_ = godotenv.Load()
+
+	// Deterministic gate: every seed run verifies VulnerableLines first.
+	// Verification touches no DB and cannot be skipped.
+	challengesEarly := buildChallenges()
+	if err := verifyChallengeLines(challengesEarly, verbose); err != nil {
+		log.Fatalf("\n[!] Challenge line verification FAILED:\n%v", err)
+	}
+	fmt.Printf("[+] Verified VulnerableLines for %d challenges.\n\n", len(challengesEarly))
+
+	if verifyOnly {
+		fmt.Println("[+] Verify-only mode: skipping database writes.")
+		return
+	}
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
@@ -684,7 +704,7 @@ func challenge4_FlaskSQLi() challengeSeed {
 		catSlug:      "injection",
 		points:       200,
 		cveReference: "CVE-2019-7164 (SQLAlchemy text() misuse pattern)",
-		vulnerableLines: []int{47, 48, 49, 50, 51},
+		vulnerableLines: []int{47, 48, 49, 50},
 		description: `A Flask e-commerce application exposes a product search endpoint.
 The developer uses SQLAlchemy but bypasses the ORM's built-in protection
 in a critical code path. The application serves ~500 concurrent users and
@@ -834,7 +854,7 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)`,
 
 		targetVuln: `SQL injection via f-string interpolation in the search query construction
-(lines 47-51). The search_term from user input is directly interpolated into the SQL
+(lines 47-50). The search_term from user input is directly interpolated into the SQL
 query string using Python f-strings. Despite using SQLAlchemy's text() function to
 execute the query, the query string itself is built with unsanitized user input.
 

@@ -1004,7 +1004,7 @@ func cveNoSQLInjection() challengeSeed {
 			"What happens if password is an object like {\"$gt\": \"\"} instead of a string?",
 			"MongoDB query operators in user input can alter the query logic.",
 		},
-		vulnerableLines: []int{21, 22, 23, 24, 25},
+		vulnerableLines: []int{23, 24, 25},
 		code: `const express = require('express');
 const { MongoClient } = require('mongodb');
 const bcrypt = require('bcrypt');
