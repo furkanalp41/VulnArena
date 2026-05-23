@@ -40,13 +40,19 @@ func main() {
 	ctx := context.Background()
 
 	// Database connections
-	pool, err := database.NewPostgres(ctx, cfg.DatabaseURL)
+	pool, err := database.NewPostgresWithOptions(ctx, cfg.DatabaseURL, database.PoolOptions{
+		MaxConns: cfg.DBMaxConns,
+		MinConns: cfg.DBMinConns,
+	})
 	if err != nil {
 		logger.Error("failed to connect to postgres", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 	defer pool.Close()
-	logger.Info("connected to PostgreSQL")
+	logger.Info("connected to PostgreSQL",
+		slog.Int("max_conns", int(cfg.DBMaxConns)),
+		slog.Int("min_conns", int(cfg.DBMinConns)),
+	)
 
 	redisClient, err := database.NewRedis(ctx, cfg.RedisURL)
 	if err != nil {

@@ -53,7 +53,9 @@ COPY --from=builder /app/package.json .
 
 ENV NODE_ENV=production
 ENV PORT=3000
-ENV ORIGIN=http://localhost:3000
+# ORIGIN must be set at runtime to the canonical public URL (e.g. https://vulnarena.com).
+# SvelteKit uses it for CSRF and form-action origin checks; setting it at runtime via
+# docker-compose lets the same image serve any environment.
 
 USER vulnarena
 

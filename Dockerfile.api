@@ -35,9 +35,6 @@ COPY --from=builder /bin/seed /app/seed
 # Copy migrations for the migrate binary
 COPY migrations/ /app/migrations/
 
-# Copy seed data
-COPY seeds/ /app/seeds/
-
 # Run as non-root user
 USER vulnarena
 

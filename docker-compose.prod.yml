@@ -52,6 +52,9 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://vulnarena.com,https://www.vulnarena.com}
+      DB_MAX_CONNS: ${DB_MAX_CONNS:-25}
+      DB_MIN_CONNS: ${DB_MIN_CONNS:-5}
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,7 +95,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
-      ORIGIN: ${ORIGIN:-http://localhost}
+      ORIGIN: ${ORIGIN:-https://vulnarena.com}
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
       interval: 10s
@@ -103,14 +106,23 @@ services:
       - frontend
 
   # ── Nginx Reverse Proxy ──
+  # Terminates TLS for vulnarena.com. The cert is provisioned and renewed by
+  # the certbot service below. Run init-letsencrypt.sh once on a fresh host
+  # before `docker compose up -d` to issue the first cert.
   nginx:
     image: nginx:1.27-alpine
     container_name: vulnarena-nginx
     restart: unless-stopped
     ports:
       - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+    # Reload every 12h so newly-renewed certs are picked up without bouncing.
+    command: >
+      /bin/sh -c "while :; do sleep 12h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
     depends_on:
       api:
         condition: service_healthy
@@ -120,9 +132,26 @@ services:
       - frontend
       - backend
 
+  # ── Certbot — Let's Encrypt cert issuance + automatic renewal ──
+  certbot:
+    image: certbot/certbot:latest
+    container_name: vulnarena-certbot
+    restart: unless-stopped
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    # Check for renewal every 12h. Certbot is a no-op until certs are
+    # within 30 days of expiry.
+    entrypoint: >
+      /bin/sh -c "trap exit TERM; while :; do certbot renew --webroot --webroot-path=/var/www/certbot --quiet; sleep 12h & wait $${!}; done;"
+    depends_on:
+      - nginx
+
 volumes:
   pgdata:
   redisdata:
+  letsencrypt:
+  certbot_webroot:
 
 networks:
   frontend:
