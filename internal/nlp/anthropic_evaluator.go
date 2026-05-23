@@ -191,10 +191,13 @@ User Target Lines: %s
 
 %s`, req.TargetVulnerability, req.ConceptualFix, vulnLinesStr, req.Language, req.Difficulty, userLinesStr, req.UserAnswer)
 
-	// Build API request
+	// Build API request. MaxTokens needs headroom for the terminal_log array
+	// (10-18 lines), matched_vuln_terms / matched_fix_terms arrays, and the
+	// numeric/boolean fields. At 1024 we observed occasional truncation that
+	// produces invalid JSON; 2048 leaves comfortable slack.
 	apiReq := anthropicRequest{
 		Model:     e.model,
-		MaxTokens: 1024,
+		MaxTokens: 2048,
 		System:    systemPrompt,
 		Messages: []anthropicMsg{
 			{Role: "user", Content: userMsg},

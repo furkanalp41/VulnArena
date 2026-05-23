@@ -65,13 +65,18 @@ func main() {
 	achievementRepo := repository.NewAchievementRepository(pool)
 	teamRepo := repository.NewTeamRepository(pool)
 
-	// NLP evaluator: use Anthropic if API key is set, otherwise keyword-based fallback
+	// NLP evaluator: prefer Anthropic when configured, with a keyword-based
+	// backup so transient LLM failures (network, rate limit, truncated JSON)
+	// degrade gracefully instead of breaking submissions.
+	keywordEval := nlp.NewLLMEvaluator(800 * time.Millisecond)
 	var evaluator nlp.SemanticMatcher
 	if cfg.Anthropic.APIKey != "" {
-		evaluator = nlp.NewAnthropicEvaluator(cfg.Anthropic.APIKey, cfg.Anthropic.Model)
-		logger.Info("semantic evaluator: Anthropic API", slog.String("model", cfg.Anthropic.Model))
+		primary := nlp.NewAnthropicEvaluator(cfg.Anthropic.APIKey, cfg.Anthropic.Model)
+		evaluator = nlp.NewFallbackEvaluator(primary, keywordEval, logger)
+		logger.Info("semantic evaluator: Anthropic API (keyword fallback armed)",
+			slog.String("model", cfg.Anthropic.Model))
 	} else {
-		evaluator = nlp.NewLLMEvaluator(800 * time.Millisecond)
+		evaluator = keywordEval
 		logger.Info("semantic evaluator: keyword-based (set ANTHROPIC_API_KEY for AI evaluation)")
 	}
 
