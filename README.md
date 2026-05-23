@@ -1,84 +1,110 @@
-\# 🛡️ VulnArena
+# VulnArena
 
+> The next-generation collaborative secure-code-audit platform.
 
+[![Go Version](https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat&logo=go)](https://golang.org/)
+[![SvelteKit](https://img.shields.io/badge/SvelteKit-2.0-FF3E00?style=flat&logo=svelte)](https://kit.svelte.dev/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)](https://www.docker.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> \*\*The Next-Generation Collaborative Secure Code Audit Platform\*\*
+VulnArena is a white-box secure-code-review platform for DevSecOps teams and offensive-security practitioners. Move beyond black-box CTFs: audit real-world CVEs, collaborate in real time with your squad, and get rigorous semantic evaluations powered by Claude.
 
+## Features
 
+- **White-box code audit** — read thousands of lines of real-world vulnerable code in C, C++, Rust, Go, Python, Node.js, Java, PHP, Ruby, C#, and more. 50 hand-crafted challenges spanning Heartbleed, Log4Shell, Shellshock, modern OWASP Top 10, and LLM/AI-era flaws.
+- **Live co-op (multiplayer)** — real-time WebSocket-backed synchronization shows remote cursors and shared line selections inside the Monaco editor so squads can audit together.
+- **AI-powered semantic evaluation** — Claude evaluates not only where the bug is but why it exists and how to remediate it. Falls back to a keyword evaluator on LLM failures so submissions are never blocked.
+- **Deterministic F1 line scoring** — every challenge ships with verified vulnerable-line indices, validated by a build-time gate (`cmd/seed -verify`) that rejects empty lines, block-comment continuations, and out-of-range indices before any DB write.
+- **Hacker CLI** — interact with the platform via the native `vulnarena` Go terminal tool.
+- **Community Forge & gamification** — XP-gated user submissions, first-blood mechanics, Discord webhook integrations.
+- **Hardened production stack** — TLS via Let's Encrypt, strict CSP, rate-limiting at both nginx and the Go middleware layer, JSON-structured audit logging, RBAC.
 
-\[!\[Go Version](https://img.shields.io/badge/Go-1.22+-00ADD8?style=flat\&logo=go)](https://golang.org/)
+## Architecture
 
-\[!\[SvelteKit](https://img.shields.io/badge/SvelteKit-2.0-FF3E00?style=flat\&logo=svelte)](https://kit.svelte.dev/)
+| Layer | Stack |
+|---|---|
+| Backend | Go 1.25 · chi · pgx v5 · go-redis · gorilla/websocket |
+| Frontend | SvelteKit 2 · TypeScript · TailwindCSS · Monaco Editor |
+| Storage | PostgreSQL 16 · Redis 7 |
+| AI Engine | Anthropic Claude (Sonnet 4) |
+| Infra | Docker Compose · Nginx · Certbot |
 
-\[!\[Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat\&logo=docker)](https://www.docker.com/)
-
-\[!\[License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-
-
-VulnArena is an elite, open-source White-Box Secure Code Review platform designed for DevSecOps teams and offensive security professionals. Move beyond standard black-box CTFs: audit real-world CVEs, collaborate in real-time with your squad, and get semantic evaluations powered by AI.
-
-
-
-\## ✨ Insane Engineering Features
-
-
-
-\* \*\*White-Box Code Audit:\*\* Dive into thousands of lines of code. Target specific vulnerable lines in C, C++, Rust, Go, Python, Node.js, and more using the integrated Monaco editor. Contains a built-in arsenal of 30+ historical CVEs (e.g., Heartbleed, Log4Shell).
-
-\* \*\*Live Co-op (Multiplayer):\*\* Offensive security is a team sport. Real-time WebSocket synchronization allows Squads to see remote cursors and shared line selections instantly.
-
-\* \*\*AI-Powered Semantic Evaluation:\*\* Integrated with the Anthropic Claude API to evaluate not just \*where\* the bug is, but \*why\* it exists and \*how\* to remediate it.
-
-\* \*\*The Anthropic Aesthetic:\*\* A highly refined, eye-strain-free, minimalist UI with dynamic Arena filtering (by language, category, and difficulty).
-
-\* \*\*The Hacker CLI:\*\* Don't like web interfaces? Interact with the platform directly via the native `vulnarena` Go terminal tool.
-
-\* \*\*Community Forge \& Gamification:\*\* XP-gated user submissions, First Blood mechanics, Discord C2 webhook integrations, and real-time alerts.
-
-\* \*\*Hardened Architecture:\*\* Strict CSP, Redis-backed Rate Limiting, JSON Structured Audit Logging, and robust RBAC.
-
-
-
-\## 🏗️ Architecture \& Tech Stack
-
-
-
-\* \*\*Backend:\*\* Go (Golang), PostgreSQL, Redis, Gorilla WebSockets.
-
-\* \*\*Frontend:\*\* SvelteKit, TypeScript, TailwindCSS, Monaco Editor.
-
-\* \*\*AI Engine:\*\* Anthropic Claude 3 API.
-
-\* \*\*Infrastructure:\*\* Docker, Docker Compose, Nginx.
-
-
-
-\## 🚀 Getting Started (Local Development)
-
-
-
-To spin up the complete environment locally, ensure Docker Desktop is running, then execute:
-
-
+## Local development
 
 ```bash
+# 1. Start infrastructure (Postgres + Redis)
+docker compose up -d
 
-\# 1. Start Infrastructure (Postgres \& Redis)
-
-docker-compose up -d
-
-
-
-\# 2. Run Migrations \& Seed the 30-CVE Arsenal
-
-go run ./cmd/migrate/main.go up
-
+# 2. Run migrations and seed the 50-challenge arsenal
+go run ./cmd/migrate -direction up
 go run ./cmd/seed
 
+# 3. Run the API
+go run ./cmd/api
 
+# 4. Run the frontend
+cd web && npm install && npm run dev
+```
 
-\# 3. Start the Go Backend API
+The API listens on `:8080`, the SvelteKit dev server on `:5173`.
 
-go run ./cmd/api/main.go
+## Verifying challenge data
 
+Every seed run verifies that each challenge's `VulnerableLines` array points to non-empty, non-comment code. To run verification without touching the database:
+
+```bash
+go run ./cmd/seed -verify        # silent on success
+go run ./cmd/seed -verify -v     # prints every matched line
+```
+
+The verifier gates the seed binary itself — there is no path to insert a challenge whose lines are wrong.
+
+## Production deployment (vulnarena.com)
+
+The production stack terminates TLS in nginx using a Let's Encrypt cert provisioned and renewed by an in-container certbot service.
+
+```bash
+# 1. Copy the prod env template and fill in real values
+cp .env.production.example .env
+$EDITOR .env   # DOMAIN, CERTBOT_EMAIL, POSTGRES_PASSWORD, JWT_SECRET, ...
+
+# 2. Point DNS for vulnarena.com and www.vulnarena.com at this host
+
+# 3. One-time cert bootstrap (creates the initial Let's Encrypt cert)
+./scripts/init-letsencrypt.sh
+
+# 4. Bring up the full stack
+docker compose -f docker-compose.prod.yml up -d
+
+# 5. Run migrations + seed (idempotent; safe to re-run)
+docker compose -f docker-compose.prod.yml run --rm migrate
+docker compose -f docker-compose.prod.yml run --rm api /app/seed
+```
+
+The certbot service runs `certbot renew` every 12 hours; nginx reloads on the same cadence to pick up renewed certs. No manual renewal needed.
+
+### Required production environment variables
+
+See `.env.production.example` for the full list. Critical ones:
+
+- `DOMAIN`, `CERTBOT_EMAIL` — for TLS issuance
+- `POSTGRES_PASSWORD`, `REDIS_PASSWORD` — strong, unique secrets
+- `JWT_SECRET` — generate with `openssl rand -hex 32`
+- `ORIGIN` — must match the public URL (`https://vulnarena.com`)
+- `ALLOWED_ORIGINS` — comma-separated CORS allowlist
+- `ANTHROPIC_API_KEY` — optional; enables AI semantic evaluation
+- `DB_MAX_CONNS`, `DB_MIN_CONNS` — pgxpool sizing
+
+### Production health checks
+
+After `docker compose up -d`, confirm:
+
+```bash
+curl https://vulnarena.com/health        # expect 200 OK
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs api | grep "connected to PostgreSQL"
+```
+
+## License
+
+MIT
