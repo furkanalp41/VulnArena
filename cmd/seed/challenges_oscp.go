@@ -14,6 +14,11 @@ func buildOSCPChallenges() []challengeSeed {
 		oscpPythonAWSConfusedDeputy(),
 		oscpJavaHibernateHQLInjection(),
 		oscpPythonXSLTInjectionRCE(),
+		oscpRustUnsafeMemoryDisclosure(),
+		oscpGoHTTPSmugglingViaBufio(),
+		oscpNodePostMessageOriginBypass(),
+		oscpNodeGraphQLAliasDoS(),
+		oscpPythonSSRFDNSRebinding(),
 	}
 }
 
@@ -1373,6 +1378,764 @@ without explicit hardening. Apply the full set:
 			"What does the XSLT document() function do when given a file:// URL?",
 		},
 		vulnerableLines: []int{16, 17},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 10 — Rust uninitialized memory disclosure via set_len + partial read
+// Difficulty 9 — Three unsafe primitives compound into a heap leak.
+// ──────────────────────────────────────────────────
+func oscpRustUnsafeMemoryDisclosure() challengeSeed {
+	return challengeSeed{
+		title:        "The Ghost Bytes — Rust Uninit Heap Disclosure",
+		slug:         "rust-unsafe-uninit-heap-disclosure",
+		difficulty:   9,
+		langSlug:     "rust",
+		catSlug:      "memory-corruption",
+		points:       700,
+		cveReference: "CWE-908 (use of uninitialized resource)",
+		description: `A Rust TCP service brokers messages between trading clients and an
+internal matching engine. The protocol is length-prefixed: 8 bytes of
+header, then a payload of header.length bytes. The handle_client
+function was written by a senior engineer optimizing for zero-copy
+hot paths and uses unsafe extensively.
+
+The service has 6 months in production processing $30M/day. A fuzzing
+campaign last week found that crafted short payloads cause the server
+to return non-deterministic bytes that occasionally include fragments
+of other clients' messages.
+
+Find the three unsafe primitives that combine into a heap memory
+disclosure, and explain how an attacker turns this into a session-
+token exfiltration.`,
+		code: `use std::io::{Read, Write};
+use std::net::TcpStream;
+
+#[repr(C)]
+struct MessageHeader {
+    magic:  u32,
+    length: u32,
+}
+
+pub fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
+    let mut header_buf = [0u8; 8];
+    stream.read_exact(&mut header_buf)?;
+
+    let header: MessageHeader = unsafe {
+        std::ptr::read(header_buf.as_ptr() as *const MessageHeader)
+    };
+
+    if header.magic != 0xC0DEFEED {
+        return Ok(());
+    }
+
+    let mut payload: Vec<u8> = Vec::with_capacity(header.length as usize);
+    unsafe { payload.set_len(header.length as usize); }
+    stream.read(&mut payload)?;
+
+    let parsed = unsafe {
+        std::slice::from_raw_parts(payload.as_ptr(), header.length as usize)
+    };
+
+    let s = unsafe { std::str::from_utf8_unchecked(parsed) };
+
+    stream.write_all(format!("Received: {}\n", s).as_bytes())?;
+    Ok(())
+}`,
+		targetVuln: `Heap memory disclosure through three compounding unsafe operations.
+
+Flaw 1 — Vec::set_len on uninitialized capacity (lines 22-23).
+   Vec::with_capacity(n) allocates n bytes but reports len() == 0.
+   The subsequent payload.set_len(n) tells the Vec it contains n
+   valid initialized bytes, but it does NOT initialize them. The
+   contents are whatever the global allocator returned — typically
+   bytes from recently-freed allocations.
+
+Flaw 2 — stream.read instead of read_exact (line 24).
+   Read::read returns the number of bytes actually read, which may
+   be SMALLER than the buffer. The code discards the return value.
+   If the attacker sends only K bytes after a header claiming
+   length=N (N >> K), only the first K bytes of payload are
+   overwritten. The remaining N - K bytes retain whatever the
+   allocator gave us in step 1.
+
+Flaw 3 — from_raw_parts + from_utf8_unchecked over the full claimed
+length (lines 26-27, 30).
+   slice::from_raw_parts builds a slice of size header.length over
+   payload's buffer, including the uninitialized tail. from_utf8_unchecked
+   wraps it as a &str without UTF-8 validation. The format! call
+   then includes those bytes in the response sent to the attacker.
+
+Exploit:
+   For each connection:
+     - Send {magic: 0xC0DEFEED, length: 65536} followed by 4 bytes.
+     - Server allocates 65536 bytes, set_len to 65536, reads 4 bytes
+       into [0..4], returns those 4 bytes + 65532 bytes of garbage.
+     - The "garbage" is the allocator's previously-freed memory —
+       often containing TLS session keys, JWT contents, order
+       payloads from other clients, or stack canaries that the
+       attacker can use to bypass ASLR.
+
+The bug only fires for "partial sends," which an attacker controls
+trivially via TCP send-window manipulation. It does not require any
+auth, race condition, or special timing.`,
+		conceptualFix: `Replace each unsafe primitive with its checked counterpart.
+
+1. Initialize the buffer:
+       let mut payload: Vec<u8> = vec![0u8; header.length as usize];
+   vec![0u8; n] allocates and zero-initializes — no set_len needed.
+   The Vec invariant is upheld by construction.
+
+2. Use read_exact:
+       stream.read_exact(&mut payload)?;
+   read_exact loops until the full buffer is filled or returns
+   ErrorKind::UnexpectedEof. The error propagates out via the ? and
+   the connection is closed cleanly.
+
+3. Drop from_raw_parts and from_utf8_unchecked:
+       let s = std::str::from_utf8(&payload)
+           .map_err(|_| std::io::Error::new(
+               std::io::ErrorKind::InvalidData, "non-UTF8 payload"))?;
+   Safe UTF-8 validation catches malformed payloads. No need for
+   from_raw_parts at all because &payload is already a &[u8] of the
+   correct length.
+
+4. Validate header.length BEFORE allocating:
+       const MAX_PAYLOAD: u32 = 64 * 1024;
+       if header.length > MAX_PAYLOAD {
+           return Ok(());
+       }
+   Without a cap, a 4 GB length triggers an OOM kill on the host.
+
+5. Defense in depth:
+   - Compile with -Z sanitizer=address in CI to catch
+     uninitialized-read bugs (Rust nightly + Miri also catches this).
+   - Replace ptr::read on attacker-controlled bytes with a checked
+     bincode/postcard deserializer; ptr::read on a packed C struct
+     from network data carries platform-endianness footguns.
+   - Use the safe-by-default bytes crate (Bytes / BytesMut) for
+     buffer management.`,
+		hints: []string{
+			"Trace what payload's underlying buffer contains immediately after Vec::with_capacity(n) followed by set_len(n). Are those bytes initialized?",
+			"Read the documentation for Read::read vs Read::read_exact. What happens when the connection delivers fewer bytes than the buffer holds?",
+			"Even if stream.read fully fills the buffer, what's wrong with using from_raw_parts to build a slice whose length came from the attacker?",
+		},
+		vulnerableLines: []int{23, 27},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 11 — Outbound HTTP request smuggling via raw bufio.Writer
+// Difficulty 5 — Legacy "we wrote our own HTTP client for performance"
+// pattern that lets the attacker smuggle a second request to the upstream.
+// ──────────────────────────────────────────────────
+func oscpGoHTTPSmugglingViaBufio() challengeSeed {
+	return challengeSeed{
+		title:        "The Whispered Request — Outbound HTTP Smuggling via Raw Writer",
+		slug:         "go-outbound-http-smuggling-bufio-writer",
+		difficulty:   5,
+		langSlug:     "go",
+		catSlug:      "injection",
+		points:       350,
+		cveReference: "CWE-93 (CRLF injection) leading to request smuggling",
+		description: `A Go metrics-relay service accepts public push requests on the
+edge, validates the metric name shape, then forwards the metric to
+an internal Prometheus pushgateway. The forwarder predates net/http
+("we built it for the throughput") and writes the upstream request
+line and headers by hand into a bufio.Writer over the raw TCP socket.
+
+The pushgateway is on a different network segment and has powerful
+admin endpoints behind a Host-header check, including a wipe-all-
+metrics endpoint reachable only from inside the cluster.
+
+Find the bug that lets the public attacker reach the admin endpoint
+through the metrics-relay even though it nominally only forwards the
+X-Metric-Name header.`,
+		code: `package handlers
+
+import (
+	"bufio"
+	"net"
+	"net/http"
+)
+
+func MetricsRelayHandler(w http.ResponseWriter, r *http.Request) {
+	metric := r.URL.Query().Get("metric")
+	if metric == "" {
+		http.Error(w, "metric required", http.StatusBadRequest)
+		return
+	}
+
+	conn, err := net.Dial("tcp", "collector.internal:9091")
+	if err != nil {
+		http.Error(w, "collector unreachable", http.StatusBadGateway)
+		return
+	}
+	defer conn.Close()
+
+	bw := bufio.NewWriter(conn)
+	bw.WriteString("POST /metrics/job/relay HTTP/1.1\r\n")
+	bw.WriteString("Host: collector.internal\r\n")
+	bw.WriteString("X-Metric-Name: " + metric + "\r\n")
+	bw.WriteString("Content-Length: 0\r\n\r\n")
+	bw.Flush()
+
+	w.WriteHeader(http.StatusOK)
+}`,
+		targetVuln: `Outbound HTTP smuggling / response splitting via unfiltered CRLF
+in a manually-constructed request.
+
+Flaw — line 26.
+   "X-Metric-Name: " + metric + "\r\n" concatenates a request-derived
+   string directly into a raw HTTP/1.1 wire frame. The metric value
+   is NEVER validated against \r\n. (The url package preserves these
+   bytes; r.URL.Query().Get returns the raw decoded value.)
+
+Why net/http's own validator does NOT save the code:
+   Go's net/http response writer rejects header VALUES containing
+   CRLF on the SERVER side (httpguts.ValidHeaderFieldValue), but
+   that protection applies to OUTGOING responses written through
+   http.ResponseWriter. The code on line 26 bypasses the entire
+   net/http stack — it speaks HTTP directly over a TCP socket and
+   writes whatever bytes it chooses.
+
+Exploit:
+   Attacker submits:
+
+       GET /relay?metric=foo\r\nContent-Length: 0\r\n\r\n
+       POST /admin/wipe HTTP/1.1\r\n
+       Host: collector.internal\r\n
+       X-Internal-Auth: yes\r\n
+       Content-Length: 0\r\n\r\n
+       X-Trailing: ignored
+
+   (URL-encoded for transport; the relay decodes %0D%0A back to CRLF.)
+
+   The bufio.Writer flushes a TCP stream containing TWO HTTP requests
+   back-to-back. The pushgateway treats the first POST /metrics/job/
+   relay as one request, then the smuggled POST /admin/wipe as a
+   SECOND request on the same connection. Because the relay is
+   internal, the pushgateway honors the X-Internal-Auth header and
+   wipes every metric in the cluster.
+
+The relay's response to the attacker (a 200) discloses nothing about
+the second request. The attacker only knows the attack worked from
+external symptoms (the pushgateway's metrics disappear).`,
+		conceptualFix: `Three layered fixes; the first two are mandatory.
+
+1. Validate the metric against an allowlist BEFORE forwarding:
+       var metricRegex = regexp.MustCompile("^[a-zA-Z_][a-zA-Z0-9_]*$")
+       if !metricRegex.MatchString(metric) {
+           http.Error(w, "invalid metric name", http.StatusBadRequest)
+           return
+       }
+   Reject anything containing CR, LF, NUL, or characters outside the
+   Prometheus metric-name alphabet.
+
+2. Stop writing HTTP by hand. Use net/http, which validates header
+   values and refuses to send CRLF in them:
+
+       req, _ := http.NewRequest("POST",
+           "http://collector.internal:9091/metrics/job/relay", nil)
+       req.Header.Set("X-Metric-Name", metric)
+       resp, err := http.DefaultClient.Do(req)
+       // ... handle resp ...
+
+   net/http's validHeaderFieldValue will reject CRLF in the header
+   value and return an error before any bytes go on the wire.
+
+3. Defense in depth:
+   - The pushgateway should not honor admin headers from the relay's
+     network segment. Move admin endpoints to a separate, mTLS-only
+     listener.
+   - The relay should not keep persistent connections to the
+     collector — disable keep-alive (Close: true on the request,
+     Connection: close header) to eliminate the second-request
+     smuggling vector even if a CRLF slips through.
+   - Run a fuzzer over the metrics parameter in CI that asserts
+     "every value with \\r or \\n returns 400."`,
+		hints: []string{
+			"Look at how the upstream request is constructed. Which bytes in the request frame came from the attacker?",
+			"Could the metric value contain '\\r\\n'? If it does, what happens to the request frame the collector sees?",
+			"What's the difference between Go's net/http header validation and writing raw bytes through a bufio.Writer over a TCP connection?",
+		},
+		vulnerableLines: []int{26},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 12 — postMessage receiver with no origin check + reply with '*'
+// Difficulty 6 — Same-origin policy bypass via missing audience checks.
+// ──────────────────────────────────────────────────
+func oscpNodePostMessageOriginBypass() challengeSeed {
+	return challengeSeed{
+		title:        "The Open Window — postMessage Origin Bypass",
+		slug:         "nodejs-postmessage-no-origin-check-token-exfil",
+		difficulty:   6,
+		langSlug:     "nodejs",
+		catSlug:      "logic-flaw",
+		points:       400,
+		cveReference: "CWE-346 (origin validation error)",
+		description: `A SaaS dashboard renders an iframe-based command bridge at
+/static/iframe-bridge.js. The parent page (https://app.example.com)
+sends typed commands to the iframe via postMessage; the iframe runs
+them with the user's authenticated session in localStorage. An SDK
+"demo console" feature lets the parent fetch the access token to
+display it to support engineers during debugging.
+
+The iframe-bridge is loaded by client SDKs embedded on customer
+websites — i.e. the iframe's parent is OFTEN a domain that
+app.example.com does not control.
+
+Find both directions of the postMessage bug that lets any cross-
+origin page steal the access token of a logged-in user.`,
+		code: `window.addEventListener('message', function (event) {
+    const msg = event.data;
+    if (!msg || typeof msg !== 'object') return;
+
+    switch (msg.cmd) {
+        case 'refresh-session':
+            refreshSession(msg.csrfToken);
+            break;
+        case 'navigate':
+            window.location.assign(msg.url);
+            break;
+        case 'logout':
+            localStorage.clear();
+            document.cookie = 'session=; max-age=0';
+            window.location.assign('/login');
+            break;
+        case 'expose-token':
+            event.source.postMessage({
+                type: 'token',
+                value: localStorage.getItem('access_token')
+            }, '*');
+            break;
+    }
+});
+
+function refreshSession(csrfToken) {
+    fetch('/api/session/refresh', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'X-CSRF-Token': csrfToken },
+    });
+}`,
+		targetVuln: `Two missing origin checks, one on the receiving side and one on
+the reply.
+
+Flaw 1 — no event.origin check on the message handler (line 1).
+   The handler accepts messages from ANY origin. The iframe is
+   loadable from arbitrary parents via:
+
+       <iframe src="https://app.example.com/static/iframe-bridge.html"></iframe>
+
+   On evil.com the attacker loads this iframe, then calls:
+
+       iframe.contentWindow.postMessage(
+           { cmd: 'expose-token' }, 'https://app.example.com');
+
+   The iframe runs in the app.example.com origin (because that's
+   where the script was served from), so localStorage holds the
+   victim's access_token. The handler accepts the message because
+   there is no event.origin === 'https://app.example.com' check.
+
+Flaw 2 — reply via postMessage(..., '*') (line 21).
+   Even if the handler did require event.source to be a trusted
+   window reference, the reply uses targetOrigin = '*'. That means
+   the reply is delivered to whatever document loaded the iframe,
+   regardless of its origin. Once evil.com's window receives the
+   token, it ships it to the attacker's server.
+
+Either flaw alone is enough; together they form a turnkey ATO
+primitive. A simple drive-by HTML page is enough to steal an
+authenticated user's access token if the user is logged into
+app.example.com and visits the attacker's page.
+
+Bonus: the 'navigate' and 'logout' commands let a cross-origin
+attacker forcibly redirect or destroy a victim's session. The
+'refresh-session' command lets them invoke the CSRF-protected
+refresh endpoint by passing whatever csrfToken they want — a
+secondary CSRF-bypass primitive.`,
+		conceptualFix: `Validate origin on both the receive and send paths.
+
+1. Validate event.origin against an explicit allowlist on every
+   incoming message:
+
+       const TRUSTED_ORIGINS = new Set([
+           'https://app.example.com',
+           'https://admin.example.com',
+       ]);
+       window.addEventListener('message', function (event) {
+           if (!TRUSTED_ORIGINS.has(event.origin)) return;
+           // safe to use event.data
+       });
+
+2. Never reply with targetOrigin = '*'. Echo the validated origin:
+
+       event.source.postMessage(payload, event.origin);
+
+3. Stop putting the access token in localStorage. Use httpOnly,
+   SameSite=Lax/Strict cookies. The token is then inaccessible to
+   any JavaScript — including same-origin XSS — and certainly not
+   extractable via postMessage.
+
+4. Don't expose privileged commands ('expose-token', 'logout',
+   'navigate') over postMessage at all. Use a same-origin
+   BroadcastChannel for parent/iframe coordination on app.example.com,
+   and a separate, narrowly-scoped, message-typed protocol for any
+   SDK-embedded surface.
+
+5. Defense in depth:
+   - X-Frame-Options: DENY on /static/iframe-bridge.html so the
+     iframe can only load inside app.example.com's own pages.
+   - Content-Security-Policy: frame-ancestors 'self'
+     https://*.example.com — equivalent and more granular.
+   - Set the access-token cookie to "Path=/api" so the token is
+     never even sent to the static assets origin.`,
+		hints: []string{
+			"What property of the MessageEvent identifies WHO sent the postMessage? Is it being checked?",
+			"What does targetOrigin = '*' mean when posting back to event.source? Who can receive that message?",
+			"Where does the access_token live? Could it be moved somewhere JavaScript can't see?",
+		},
+		vulnerableLines: []int{1, 21},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 13 — GraphQL alias-based amplification DoS
+// Difficulty 7 — Single request triggers 1000+ heavy DB calls via
+// field aliasing; no query-cost limit in the schema config.
+// ──────────────────────────────────────────────────
+func oscpNodeGraphQLAliasDoS() challengeSeed {
+	return challengeSeed{
+		title:        "Alias Storm — GraphQL Amplification DoS",
+		slug:         "nodejs-graphql-alias-amplification-dos",
+		difficulty:   7,
+		langSlug:     "nodejs",
+		catSlug:      "logic-flaw",
+		points:       500,
+		cveReference: "CWE-770 (resource allocation without limits)",
+		description: `A Node.js GraphQL service powers the public account-summary API for
+a personal-finance app. Each accountBalance field is computed by a
+batch job that aggregates the user's transactions over a sliding 30-
+day window — about 200 ms of CPU and 6 DB roundtrips per call.
+
+The team correctly enforces per-user, per-minute rate limits at the
+HTTP layer (60 requests / minute / IP). They have not enforced any
+GraphQL-specific limits, reasoning that "GraphQL is just one HTTP
+request."
+
+A small DDoS last weekend brought the matching engine to its knees.
+The attackers used a single client and well under the per-IP rate
+limit. Find the multiplier.`,
+		code: `const { ApolloServer, gql } = require('apollo-server');
+const db = require('./db');
+
+const schema = [
+  'type Query {',
+  '  user(id: ID!): User',
+  '  accountBalance(userId: ID!): Float',
+  '}',
+  'type User {',
+  '  id: ID!',
+  '  name: String',
+  '  email: String',
+  '  accountBalance: Float',
+  '  apiKeys: [String]',
+  '}'
+].join('\n');
+
+const typeDefs = gql(schema);
+
+const resolvers = {
+  Query: {
+    user: async (_, { id }, ctx) => {
+      if (!ctx.userId) throw new Error('Unauthorized');
+      return db.users.findById(id);
+    },
+    accountBalance: async (_, { userId }, ctx) => {
+      if (!ctx.userId) throw new Error('Unauthorized');
+      return db.balances.heavyComputation(userId);
+    },
+  },
+  User: {
+    accountBalance: async (user) => {
+      return db.balances.heavyComputation(user.id);
+    },
+    apiKeys: async (user) => {
+      return db.apiKeys.findByUserId(user.id);
+    },
+  },
+};
+
+const server = new ApolloServer({
+  typeDefs,
+  resolvers,
+  context: ({ req }) => ({ userId: parseJWT(req.headers.authorization) }),
+});
+
+server.listen({ port: 4000 });`,
+		targetVuln: `GraphQL field aliasing turns a single HTTP request into thousands
+of expensive resolver invocations because the schema has no query-
+cost limit.
+
+The vulnerability surface (lines 27, 33).
+   The accountBalance resolver — both as a top-level Query and as a
+   User field — invokes db.balances.heavyComputation, which is a
+   200-ms aggregation. The resolver does NO memoization, batching,
+   or rate limiting per invocation. The schema config (line 41-44)
+   declares no validation rules, depth limit, complexity limit, or
+   alias limit.
+
+Exploit:
+   GraphQL's alias feature lets a client request the same field
+   under different names within a single query:
+
+       query Storm {
+         a1: accountBalance(userId: "victim")
+         a2: accountBalance(userId: "victim")
+         a3: accountBalance(userId: "victim")
+         ... (5000 aliases)
+       }
+
+   Apollo resolves every alias as a SEPARATE call to the resolver.
+   One HTTP request → 5000 heavyComputation calls → 16 minutes of
+   CPU work and 30 000 database roundtrips per attack request.
+
+   The HTTP rate limit (60/min) is unaffected — the attacker sends
+   one request per minute and burns hours of server CPU per minute.
+   At 100 concurrent attackers the matching engine starves.
+
+Secondary surface:
+   The apiKeys resolver (line 36) is unconditional — it does NOT
+   re-check ctx.userId or that the parent User belongs to the
+   caller. Combined with aliased user(id: ...) queries, a single
+   request can pull every user's API keys in batches:
+
+       query { u1: user(id:"1"){ apiKeys } u2: user(id:"2"){ apiKeys } ... }
+
+   That's a separate IDOR — but the alias amplification is what
+   makes it practical at scale.`,
+		conceptualFix: `Apply per-resolver and per-query bounds.
+
+1. Add a query-complexity / depth / alias limit to the ApolloServer
+   config:
+
+       const depthLimit = require('graphql-depth-limit');
+       const costAnalysis = require('graphql-cost-analysis').default;
+
+       new ApolloServer({
+         typeDefs, resolvers,
+         validationRules: [
+           depthLimit(5),
+           costAnalysis({ maximumCost: 1000, defaultCost: 1 }),
+         ],
+         context: ...,
+       });
+
+   Annotate expensive fields with explicit cost:
+
+       accountBalance: Float @cost(complexity: 50)
+
+   A query that breaches the budget is rejected at validation time,
+   before any resolver runs.
+
+2. Batch within the request via DataLoader. Wrap heavyComputation:
+
+       const balanceLoader = new DataLoader(async (userIds) => {
+         return db.balances.heavyComputationBatch(userIds);
+       });
+
+       accountBalance: async (_, { userId }) => balanceLoader.load(userId),
+
+   Multiple aliases requesting the same userId resolve in a SINGLE
+   batched call.
+
+3. Fix the IDOR on the apiKeys resolver:
+
+       apiKeys: async (user, _, ctx) => {
+         if (user.id !== ctx.userId && !ctx.isAdmin) {
+           throw new ForbiddenError('not your keys');
+         }
+         return db.apiKeys.findByUserId(user.id);
+       },
+
+4. Defense in depth:
+   - Persisted queries: clients ship a query hash; the server
+     accepts only pre-registered queries. Eliminates ad-hoc DoS
+     surfaces entirely.
+   - Per-resolver timeout via a cancellation token in ctx.
+   - Alert on requests with > N aliases (where N = 50, say) at the
+     GraphQL middleware layer.`,
+		hints: []string{
+			"What does field aliasing in GraphQL let a client do that is invisible to per-HTTP-request rate limiting?",
+			"Look at the accountBalance resolver. Is there any deduplication or batching when the same userId is requested many times in one query?",
+			"How would you bound the total work a single GraphQL request can do, independent of how many fields it lists?",
+		},
+		vulnerableLines: []int{28, 33},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 14 — SSRF via DNS rebinding TOCTOU
+// Difficulty 8 — Safety check resolves DNS once; the HTTP client
+// resolves it again at request time — different answer the second time.
+// ──────────────────────────────────────────────────
+func oscpPythonSSRFDNSRebinding() challengeSeed {
+	return challengeSeed{
+		title:        "The Shifting Address — SSRF via DNS Rebinding TOCTOU",
+		slug:         "python-ssrf-dns-rebinding-toctou",
+		difficulty:   8,
+		langSlug:     "python",
+		catSlug:      "ssrf",
+		points:       600,
+		cveReference: "CWE-367 + CWE-918 (TOCTOU on URL host)",
+		description: `A Python image-preview service accepts a URL from authenticated
+users and renders a thumbnail. It runs on AWS EC2 with the instance
+metadata service (IMDSv1) reachable at 169.254.169.254. The team
+added an SSRF guard six months ago after a pen test: any URL whose
+hostname resolves to a private/loopback/link-local IP is rejected
+with a 403.
+
+The guard works against trivial bypasses (raw IP, localhost). The
+team is confident the metadata service is unreachable.
+
+Find the bypass that costs the attacker a single DNS record and
+~30 seconds of patience.`,
+		code: `import socket
+import ipaddress
+from urllib.parse import urlparse
+import requests
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+
+def is_safe_host(hostname: str) -> bool:
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return False
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return False
+    return True
+
+
+@app.route("/api/preview", methods=["POST"])
+def preview():
+    body = request.get_json(force=True)
+    url = body.get("url")
+    if not url:
+        return jsonify({"error": "url required"}), 400
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return jsonify({"error": "scheme not allowed"}), 400
+    if not parsed.hostname:
+        return jsonify({"error": "hostname required"}), 400
+
+    if not is_safe_host(parsed.hostname):
+        return jsonify({"error": "host blocked"}), 403
+
+    resp = requests.get(url, timeout=10)
+    return jsonify({
+        "status": resp.status_code,
+        "headers": dict(resp.headers),
+        "body": resp.text[:10000]
+    })`,
+		targetVuln: `Classic DNS rebinding TOCTOU between the safety check and the
+HTTP fetch.
+
+Flaw — two independent DNS resolutions (lines 35, 38).
+   Line 35: is_safe_host(parsed.hostname) calls socket.getaddrinfo,
+   which resolves the hostname via the OS resolver. The check then
+   asserts that every returned IP is non-private.
+
+   Line 38: requests.get(url, ...) parses the URL again, and the
+   underlying urllib3 / http.client resolves the hostname AGAIN to
+   open the TCP connection. That's a SEPARATE call to the resolver.
+
+Between the two resolutions the attacker's authoritative DNS server
+can return a different IP. The classic recipe:
+
+   1. Register evil.dnsrebinder.example with two A records and a TTL
+      of 1 second: 198.51.100.7 (a public IP they own) and
+      169.254.169.254 (the AWS metadata service).
+   2. The first DNS query — from is_safe_host — returns 198.51.100.7.
+      The check passes (public IP, not private).
+   3. The attacker's DNS server then begins returning ONLY
+      169.254.169.254 for that hostname.
+   4. The second DNS query — from requests.get — returns
+      169.254.169.254. The HTTP client connects to the metadata
+      service. The response contains IAM credentials for the worker's
+      EC2 instance.
+
+Why a TTL of 1 second is enough:
+   Python's stub resolver and the OS resolver honor short TTLs.
+   requests.get does no caching of its own. Between the two
+   getaddrinfo calls (microseconds in code), the cached entry has
+   already expired and a fresh query goes to the attacker's DNS.
+
+Tools like rbndr.us and Singularity of Origin productize this; an
+attacker does not have to operate their own nameserver.`,
+		conceptualFix: `Eliminate the two-resolution window. There are three robust
+strategies; combine them for defense in depth.
+
+1. Resolve once and connect by IP — pin the address.
+       infos = socket.getaddrinfo(parsed.hostname, parsed.port or 443)
+       safe_ip = None
+       for info in infos:
+           ip = ipaddress.ip_address(info[4][0])
+           if not (ip.is_private or ip.is_loopback or
+                   ip.is_link_local or ip.is_reserved):
+               safe_ip = ip
+               break
+       if not safe_ip:
+           return jsonify({"error": "host blocked"}), 403
+
+       # Connect to the verified IP, preserve the Host header for
+       # virtual-host routing on the upstream:
+       url_to_fetch = url.replace(parsed.hostname, str(safe_ip), 1)
+       resp = requests.get(
+           url_to_fetch,
+           headers={"Host": parsed.hostname},
+           timeout=10,
+           verify=(parsed.hostname if parsed.scheme == "https" else False),
+       )
+
+2. Block the metadata service at the network layer.
+       - EC2: enforce IMDSv2 (session-token required) and run instances
+         with HttpTokens=required + HttpEndpoint=enabled and the
+         hop-limit set to 1. Even if the fetch reaches 169.254.169.254
+         the missing token returns 401.
+       - GCP: use the GCE metadata Flavor: Google header check.
+       - K8s: use a NetworkPolicy or egress firewall to drop traffic
+         to 169.254.0.0/16 from workload pods.
+
+3. Use a SSRF-aware HTTP library or proxy.
+       - Use the safe-fetch crate equivalent in Python: ssrf-protect,
+         python-requests-ssrf, or write a transport adapter that
+         resolves once and pins the socket.
+       - Front all outbound traffic with an egress proxy that re-checks
+         the destination IP after its own resolution.
+
+4. Defense in depth:
+   - Drop the SVG previewer's network egress entirely if the use case
+     allows. Render thumbnails of user-uploaded images only, never of
+     arbitrary URLs.
+   - Run the preview worker in a network namespace whose default
+     route blocks RFC1918 + 169.254.0.0/16.
+   - Log every preview fetch with its resolved IP; alert on any IP
+     in 169.254.0.0/16 even if it shouldn't be reachable.`,
+		hints: []string{
+			"How many times is the hostname resolved during a single preview request?",
+			"Could the answer to a DNS query change between two calls to socket.getaddrinfo, one second apart?",
+			"What service on a typical AWS EC2 instance answers on the link-local address 169.254.169.254, and why would the attacker want it?",
+		},
+		vulnerableLines: []int{35, 38},
 	}
 }
 
