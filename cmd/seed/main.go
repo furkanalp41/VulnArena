@@ -208,7 +208,8 @@ func buildChallenges() []challengeSeed {
 		challenge6_CppRCE(),
 	}
 	all := append(base, buildCVEChallenges()...)
-	return append(all, buildModernChallenges()...)
+	all = append(all, buildModernChallenges()...)
+	return append(all, buildOSCPChallenges()...)
 }
 
 // ──────────────────────────────────────────────────
