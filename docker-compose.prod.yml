@@ -47,7 +47,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
       interval: 10s
       timeout: 3s
       start_period: 10s
@@ -80,10 +80,14 @@ services:
       PORT: "3000"
       ORIGIN: ${ORIGIN:-https://vulnarena.com}
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/"]
+      # adapter-node binds IPv4-only on 0.0.0.0; busybox wget resolves
+      # "localhost" to ::1 first and won't fall back to IPv4. Use 127.0.0.1.
+      # Also extended start_period to 15s for cold-start SSR of the landing
+      # page (Monaco-related chunks lazy-load on first hit).
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
       interval: 10s
       timeout: 3s
-      start_period: 10s
+      start_period: 15s
       retries: 3
     networks:
       - frontend

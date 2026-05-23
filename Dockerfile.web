@@ -61,7 +61,10 @@ USER vulnarena
 
 EXPOSE 3000
 
-HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget -qO- http://localhost:3000/ || exit 1
+# adapter-node binds IPv4-only on 0.0.0.0; busybox wget in node:22-alpine
+# resolves "localhost" to ::1 first and does NOT fall back to IPv4 when the
+# IPv6 connect is refused. Use 127.0.0.1 explicitly.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=15s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/ || exit 1
 
 CMD ["node", "build"]

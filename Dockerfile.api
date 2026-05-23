@@ -40,7 +40,10 @@ USER vulnarena
 
 EXPOSE 8080
 
+# Use 127.0.0.1 explicitly — busybox wget in alpine resolves "localhost" to
+# ::1 first and won't fall back to IPv4. Stays correct even if the Go server
+# ever switches from dual-stack ":8080" to an IPv4-only bind.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget -qO- http://localhost:8080/health || exit 1
+  CMD wget -qO- http://127.0.0.1:8080/health || exit 1
 
 ENTRYPOINT ["/app/api"]
