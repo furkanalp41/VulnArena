@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -209,7 +210,8 @@ func (h *AdminHandler) PublishCommunityChallenge(w http.ResponseWriter, r *http.
 			writeError(w, http.StatusNotFound, "community challenge not found")
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "failed to publish challenge: "+err.Error())
+		slog.Error("publish community challenge failed", slog.String("challenge_id", id.String()), slog.String("reviewer_id", reviewerID.String()), slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, "failed to publish challenge")
 		return
 	}
 

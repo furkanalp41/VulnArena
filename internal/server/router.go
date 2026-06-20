@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/vulnarena/vulnarena/internal/handler"
 	"github.com/vulnarena/vulnarena/internal/server/middleware"
@@ -15,6 +16,7 @@ import (
 
 type RouterDeps struct {
 	Logger             *slog.Logger
+	PgPool             *pgxpool.Pool
 	RedisClient        *redis.Client
 	AuthService        *service.AuthService
 	APIKeyService      *service.APIKeyService
@@ -39,14 +41,19 @@ func NewRouter(deps RouterDeps) *chi.Mux {
 	// Global middleware
 	r.Use(chiMiddleware.RequestID)
 	r.Use(chiMiddleware.RealIP)
+	// Cap request bodies at 5 MB so unbounded POST payloads cannot exhaust memory.
+	r.Use(chiMiddleware.RequestSize(5 << 20))
 	r.Use(middleware.Security)
 	r.Use(middleware.Logging(deps.Logger))
 	r.Use(middleware.CORS(deps.AllowedOrigins...))
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(middleware.RateLimit(deps.RedisClient, 100, 1*time.Minute))
 
-	// Health check
+	// Health check (shallow liveness)
 	r.Get("/health", handler.HealthCheck)
+
+	// Readiness (deep: verifies Postgres + Redis connectivity)
+	r.Get("/readyz", handler.Readiness(deps.PgPool, deps.RedisClient))
 
 	// API v1
 	r.Route("/api/v1", func(r chi.Router) {

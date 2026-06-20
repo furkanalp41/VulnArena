@@ -90,10 +90,19 @@ type Client struct {
 	hub         *Hub
 	conn        *websocket.Conn
 	send        chan []byte
+	closeOnce   sync.Once // guards close(send) so it can never double-close
 	UserID      string
 	Username    string
 	DisplayName string
 	RoomKey     string // "" = global-only, "challengeID:teamID" = in a room
+}
+
+// closeSend closes the client's send channel exactly once. Safe to call from
+// any hub case; subsequent calls are no-ops, preventing a double-close panic.
+func (c *Client) closeSend() {
+	c.closeOnce.Do(func() {
+		close(c.send)
+	})
 }
 
 // NewHub creates a new Hub.
@@ -118,6 +127,17 @@ func NewHub(logger *slog.Logger, allowedOrigins []string) *Hub {
 
 // Run starts the hub's main event loop. Should be called in a goroutine.
 func (h *Hub) Run() {
+	// A panic in the hub loop would crash the whole API. Recover, log, and
+	// restart the loop so a single bad message degrades gracefully instead of
+	// taking down the process.
+	defer func() {
+		if r := recover(); r != nil {
+			h.logger.Error("ws hub Run panic recovered; restarting loop",
+				slog.Any("panic", r))
+			go h.Run()
+		}
+	}()
+
 	for {
 		select {
 		case client := <-h.register:
@@ -129,35 +149,30 @@ func (h *Hub) Run() {
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
-				// Remove from room if in one
+				// Notify remaining room members before removal (removeClientLocked
+				// drops the client from the room set, so emit the leave event first).
 				if client.RoomKey != "" {
-					if room, exists := h.rooms[client.RoomKey]; exists {
-						delete(room, client)
-						if len(room) == 0 {
-							delete(h.rooms, client.RoomKey)
-						} else {
-							// Notify remaining room members
-							h.broadcastToRoomLocked(client.RoomKey, client, buildRoomEvent(EventRoomUserLeft, client))
-						}
+					if room, exists := h.rooms[client.RoomKey]; exists && len(room) > 1 {
+						h.broadcastToRoomLocked(client.RoomKey, client, buildRoomEvent(EventRoomUserLeft, client))
 					}
 				}
-				delete(h.clients, client)
-				close(client.send)
+				h.removeClientLocked(client)
 			}
 			h.mu.Unlock()
 			h.logger.Debug("ws client disconnected", slog.Int("total", len(h.clients)))
 
 		case message := <-h.broadcast:
-			h.mu.RLock()
+			// Write lock: a full send buffer causes us to mutate h.clients and
+			// h.rooms, so we must hold the write lock, not RLock.
+			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- message:
 				default:
-					close(client.send)
-					delete(h.clients, client)
+					h.removeClientLocked(client)
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
 
 		case join := <-h.joinRoom:
 			h.mu.Lock()
@@ -210,43 +225,87 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 
 		case msg := <-h.roomMsg:
-			h.mu.RLock()
+			// Write lock: a full send buffer causes us to mutate h.clients and
+			// h.rooms, so we must hold the write lock, not RLock.
+			h.mu.Lock()
 			if room, exists := h.rooms[msg.RoomKey]; exists {
+				// Snapshot recipients first: removeClientLocked may delete the
+				// room map entry mid-iteration when its last member is dropped.
+				recipients := make([]*Client, 0, len(room))
 				for client := range room {
 					if msg.SenderOnly != nil && client == msg.SenderOnly {
 						continue
 					}
+					recipients = append(recipients, client)
+				}
+				for _, client := range recipients {
 					select {
 					case client.send <- msg.Data:
 					default:
-						close(client.send)
-						delete(h.clients, client)
-						delete(room, client)
+						h.removeClientLocked(client)
 					}
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
 		}
 	}
 }
 
+// removeClientLocked fully removes a client from the hub: it deletes the client
+// from h.clients, from every room set in h.rooms (pruning now-empty rooms), and
+// closes the client's send channel exactly once. Centralizing removal here means
+// a client can never linger in a room map after being dropped from h.clients, and
+// the send channel can never be double-closed. Must be called while holding the
+// hub write lock (h.mu.Lock).
+func (h *Hub) removeClientLocked(client *Client) {
+	if _, ok := h.clients[client]; !ok {
+		// Already removed (e.g. dropped during a prior broadcast pass).
+		return
+	}
+	delete(h.clients, client)
+
+	if client.RoomKey != "" {
+		if room, exists := h.rooms[client.RoomKey]; exists {
+			delete(room, client)
+			if len(room) == 0 {
+				delete(h.rooms, client.RoomKey)
+			}
+		}
+	}
+	// Defensive: ensure the client is not present in any other room set.
+	for key, room := range h.rooms {
+		if _, in := room[client]; in {
+			delete(room, client)
+			if len(room) == 0 {
+				delete(h.rooms, key)
+			}
+		}
+	}
+
+	client.closeSend()
+}
+
 // broadcastToRoomLocked sends a message to all clients in a room except the sender.
-// Must be called while holding h.mu.
+// Must be called while holding the hub write lock (h.mu.Lock), since a full send
+// buffer triggers client removal via removeClientLocked.
 func (h *Hub) broadcastToRoomLocked(roomKey string, sender *Client, data []byte) {
 	room, exists := h.rooms[roomKey]
 	if !exists {
 		return
 	}
+	// Snapshot recipients: removeClientLocked may mutate (or delete) the room map.
+	recipients := make([]*Client, 0, len(room))
 	for client := range room {
 		if client == sender {
 			continue
 		}
+		recipients = append(recipients, client)
+	}
+	for _, client := range recipients {
 		select {
 		case client.send <- data:
 		default:
-			close(client.send)
-			delete(h.clients, client)
-			delete(room, client)
+			h.removeClientLocked(client)
 		}
 	}
 }
@@ -372,6 +431,12 @@ func ServeWS(hub *Hub) http.HandlerFunc {
 // For unauthenticated clients, it only handles keepalive.
 func (c *Client) readPump() {
 	defer func() {
+		// A panic here must only tear down this one connection, never the process.
+		if r := recover(); r != nil {
+			c.hub.logger.Error("ws readPump panic recovered",
+				slog.String("user_id", c.UserID),
+				slog.Any("panic", r))
+		}
 		c.hub.unregister <- c
 		c.conn.Close()
 	}()
@@ -458,6 +523,12 @@ func (c *Client) handleInbound(msg InboundMessage) {
 func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
+		// A panic here must only tear down this one connection, never the process.
+		if r := recover(); r != nil {
+			c.hub.logger.Error("ws writePump panic recovered",
+				slog.String("user_id", c.UserID),
+				slog.Any("panic", r))
+		}
 		ticker.Stop()
 		c.conn.Close()
 	}()

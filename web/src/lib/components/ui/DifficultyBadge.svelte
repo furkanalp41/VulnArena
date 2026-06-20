@@ -30,14 +30,15 @@
 
 <style>
   .badge {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     display: inline-flex;
     align-items: center;
     border: 1px solid var(--badge-color);
     color: var(--badge-color);
     background: color-mix(in srgb, var(--badge-color) 10%, transparent);
-    border-radius: var(--radius-md);
-    letter-spacing: 0.02em;
+    border-radius: var(--radius-badge);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     font-weight: 500;
     white-space: nowrap;
   }
@@ -48,7 +49,7 @@
   }
 
   .badge-md {
-    font-size: 0.6875rem;
+    font-size: var(--fs-eyebrow);
     padding: 2px 8px;
   }
 </style>

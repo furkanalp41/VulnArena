@@ -109,6 +109,15 @@ func classifyComments(code, langSlug string) []bool {
 	blockOpen, blockClose := blockCommentDelimiters(langSlug)
 	hasBlock := blockOpen != ""
 
+	// Fortran has no block comments; handle both source forms directly off the
+	// raw line (column 1 matters for fixed-form) and skip the C-family logic.
+	if isFortran(langSlug) {
+		for i, raw := range lines {
+			result[i] = fortranCommentLine(raw)
+		}
+		return result
+	}
+
 	inBlock := false
 	for i, raw := range lines {
 		trimmed := strings.TrimSpace(raw)
@@ -255,4 +264,57 @@ func blockCommentDelimiters(langSlug string) (open, close string) {
 		return "<!--", "-->"
 	}
 	return "", ""
+}
+
+// isFortran reports whether the language slug denotes Fortran in any of its
+// common spellings. Fortran needs bespoke comment handling because it has two
+// source forms (free-form and fixed-form) and no block comments.
+func isFortran(langSlug string) bool {
+	switch langSlug {
+	case "fortran", "f90", "f95", "f03", "f08", "f77", "for", "f":
+		return true
+	}
+	return false
+}
+
+// fortranCommentLine reports whether a raw Fortran line is comment-only,
+// covering both source forms:
+//
+//   - Free-form (.f90+): the first non-blank character is "!". This also
+//     classifies OpenMP/OpenACC sentinels (!$omp, !$acc) and preprocessor-style
+//     "!" directives as comments, which is correct — they are never code we
+//     would target as a vulnerable line.
+//   - Fixed-form (F77): column 1 holds C, c, or * (or "!"). The C/c case is
+//     guarded so it does not swallow free-form statements that legitimately
+//     begin in column 1 with an identifier (CALL, CONTINUE, COMMON, ...): the
+//     marker only counts when it stands alone, i.e. the next byte is not an
+//     identifier character.
+func fortranCommentLine(raw string) bool {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		// Blank lines are caught by the EMPTY check, not here.
+		return false
+	}
+
+	// Free-form comment: first non-blank char starts the comment.
+	if strings.HasPrefix(trimmed, "!") {
+		return true
+	}
+
+	// Fixed-form column-1 comment markers.
+	switch raw[0] {
+	case '*':
+		return true
+	case 'C', 'c':
+		if len(raw) == 1 {
+			return true
+		}
+		next := raw[1]
+		isIdentChar := next == '_' ||
+			(next >= 'a' && next <= 'z') ||
+			(next >= 'A' && next <= 'Z') ||
+			(next >= '0' && next <= '9')
+		return !isIdentChar
+	}
+	return false
 }

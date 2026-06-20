@@ -38,6 +38,28 @@
   --z-sticky: 200;
   --z-modal: 300;
   --z-toast: 400;
+
+  /* ---- Editorial type scale (~1.2) ---- */
+  --fs-eyebrow: 0.6875rem;
+  --fs-label: 0.75rem;
+  --fs-micro: 0.8125rem;
+  --fs-body: 0.9375rem;
+  --fs-lead: 1.125rem;
+  --fs-h4: 1.25rem;
+  --fs-h3: 1.5rem;
+  --fs-h2: 1.9375rem;
+  --fs-h1: 2.5rem;
+  --fs-display: 3.25rem;
+
+  /* ---- Layout measures ---- */
+  --measure: 66ch;
+  --shell: 1240px;
+
+  /* ---- Classic radius policy (aliases over the existing scale) ---- */
+  --radius-card: var(--radius-md);
+  --radius-input: var(--radius-sm);
+  --radius-badge: var(--radius-sm);
+  --radius-pill: 999px;
 }
 
 /* ============================================
@@ -65,6 +87,18 @@
   --accent-green: #d4a574;
   --accent-green-dim: #c4955e;
   --accent-green-glow: #d4a57420;
+  /* Canonical editorial ink (sand) — alias of the historical --accent-green */
+  --accent-primary: #d4a574;
+  --accent-primary-dim: #c4955e;
+  --accent-primary-glow: #d4a57420;
+  /* Previously-undefined token, repointed to slate-blue */
+  --accent-cyan: #8b9dc3;
+  /* Co-op collaborator identity ramp (earthy; exempt from the semantic reservation) */
+  --collab-1: #c08a5e;
+  --collab-2: #9a9f6b;
+  --collab-3: #a78b9a;
+  --collab-4: #6f9a9d;
+  --collab-5: #c2a04e;
   --accent-blue: #8b9dc3;
   --accent-blue-dim: #7b8db3;
   --accent-blue-glow: #8b9dc320;
@@ -121,6 +155,15 @@
   --accent-green: #b8845a;
   --accent-green-dim: #a6744a;
   --accent-green-glow: #b8845a20;
+  --accent-primary: #b8845a;
+  --accent-primary-dim: #a6744a;
+  --accent-primary-glow: #b8845a20;
+  --accent-cyan: #6b7fa3;
+  --collab-1: #a06a3e;
+  --collab-2: #72783f;
+  --collab-3: #86657a;
+  --collab-4: #3f6f72;
+  --collab-5: #9a7a2c;
   --accent-blue: #6b7fa3;
   --accent-blue-dim: #5b6f93;
   --accent-blue-glow: #6b7fa320;
@@ -222,4 +265,93 @@ a:hover {
 
 .text-accent {
   color: var(--accent-green);
+}
+
+/* ============================================
+   Editorial pattern atoms (shared, opt-in)
+   Used by the redesigned screens. Print-classic
+   vocabulary: tracked small-caps, hairline rules,
+   tabular figures, a centred shell rail.
+   ============================================ */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.osf {
+  font-variant-numeric: oldstyle-nums;
+}
+
+.shell {
+  max-width: var(--shell);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+
+.reading {
+  max-width: var(--measure);
+}
+
+.rule {
+  height: 1px;
+  background: var(--border-primary);
+  border: 0;
+  margin: 0;
+}
+
+/* Tracked small-caps kicker that sits above a serif heading. */
+.eyebrow {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--fs-eyebrow);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  color: var(--text-tertiary);
+}
+
+/* Inline tracked small-caps label. */
+.smallcaps {
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--text-tertiary);
+}
+
+/* Serif section header with an optional trailing small-caps note over a hairline. */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.section-header h2,
+.section-header h3 {
+  font-family: var(--font-serif);
+  font-size: var(--fs-h3);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.section-header .smallcaps {
+  margin-left: auto;
+}
+
+/* Quiet "·"-joined byline for cards and headers. */
+.dateline {
+  font-family: var(--font-mono);
+  font-size: var(--fs-micro);
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.dateline .sep {
+  color: var(--text-tertiary);
+  margin: 0 0.35em;
 }

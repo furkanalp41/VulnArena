@@ -20,8 +20,8 @@
 
 <style>
   .card {
-    border-radius: var(--radius-lg);
-    transition: all var(--transition-base);
+    border-radius: var(--radius-card);
+    transition: border-color var(--transition-base);
   }
 
   .card-default {
@@ -29,8 +29,16 @@
     border: 1px solid var(--border-primary);
   }
 
+  /* Canonical elevation/hover defined once, here — a quiet border deepen,
+     no translateY lift. */
+  .card-default:hover,
+  .card-bordered:hover {
+    border-color: var(--border-secondary);
+  }
+
   .card-elevated {
     background: var(--bg-elevated);
+    border: 1px solid var(--border-primary);
     box-shadow: var(--shadow-md);
   }
 

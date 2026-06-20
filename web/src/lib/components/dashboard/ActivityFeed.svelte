@@ -30,8 +30,8 @@
 
   function typeColor(type: ActivityEntry['type']): string {
     switch (type) {
-      case 'challenge_solved': return 'var(--accent-green)';
-      case 'challenge_attempted': return 'var(--difficulty-5)';
+      case 'challenge_solved': return 'var(--accent-primary)';
+      case 'challenge_attempted': return 'var(--diff-5)';
       case 'lesson_completed': return 'var(--accent-blue)';
       default: return 'var(--text-tertiary)';
     }
@@ -41,28 +41,28 @@
 <div class="activity-feed">
   {#if activities.length === 0}
     <div class="feed-empty">
-      <span class="feed-empty-icon">$</span>
-      <span>No activity yet. Start solving challenges.</span>
+      <div class="rule"></div>
+      <p class="feed-empty-line">
+        <span class="prompt">$</span> log --tail
+      </p>
+      <p class="feed-empty-msg">No activity yet. Start solving challenges.</p>
     </div>
   {:else}
-    <ul class="feed-list">
+    <ul class="feed">
       {#each activities as entry}
-        <li class="feed-item">
-          <span class="feed-icon" style:color={typeColor(entry.type)}>{typeIcon(entry.type)}</span>
-          <div class="feed-content">
-            <span class="feed-title">{entry.title}</span>
-            <div class="feed-meta">
+        <li>
+          <span class="mark" style:color={typeColor(entry.type)}>{typeIcon(entry.type)}</span>
+          <span class="subj">
+            <b>{entry.title}</b>
+            <span class="meta">
               {#if entry.type !== 'lesson_completed'}
-                <span class="feed-score" style:color={typeColor(entry.type)}>
-                  {entry.score}%
-                </span>
-                <span class="feed-sep">·</span>
+                <span class="score tnum" style:color={typeColor(entry.type)}>{entry.score}%</span>
+                <span class="sep">·</span>
               {/if}
-              <span class="feed-points">+{entry.points} XP</span>
-              <span class="feed-sep">·</span>
-              <span class="feed-time">{timeAgo(entry.occurred_at)}</span>
-            </div>
-          </div>
+              <span class="points tnum">+{entry.points} XP</span>
+            </span>
+          </span>
+          <span class="ts tnum">{timeAgo(entry.occurred_at)}</span>
         </li>
       {/each}
     </ul>
@@ -74,88 +74,96 @@
     width: 100%;
   }
 
-  .feed-empty {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 1.5rem;
-    font-size: 0.8rem;
-    color: var(--text-tertiary);
-  }
-
-  .feed-empty-icon {
-    color: var(--accent-green);
-  }
-
-  .feed-list {
+  .feed {
     list-style: none;
     margin: 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
   }
 
-  .feed-item {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.75rem;
-    padding: 0.65rem 0.75rem;
+  .feed li {
+    display: grid;
+    grid-template-columns: 1.4rem 1fr auto;
+    gap: var(--space-3);
+    align-items: baseline;
+    padding: var(--space-3) 0;
     border-bottom: 1px solid var(--border-primary);
-    transition: background 0.15s ease;
+    font-size: var(--fs-micro);
   }
 
-  .feed-item:last-child {
-    border-bottom: none;
+  .feed li:last-child {
+    border-bottom: 0;
   }
 
-  .feed-item:hover {
-    background: var(--bg-hover);
-  }
-
-  .feed-icon {
+  .feed .mark {
     font-family: var(--font-mono);
-    font-size: 0.8rem;
-    font-weight: 700;
-    flex-shrink: 0;
-    padding-top: 0.1rem;
+    color: var(--text-tertiary);
   }
 
-  .feed-content {
-    display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
+  .subj {
+    color: var(--text-primary);
     min-width: 0;
   }
 
-  .feed-title {
-    font-size: 0.8rem;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .feed-meta {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.7rem;
-    color: var(--text-tertiary);
-  }
-
-  .feed-score {
+  .subj b {
+    font-family: var(--font-serif);
     font-weight: 600;
   }
 
-  .feed-points {
+  .meta {
+    display: inline;
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    color: var(--text-tertiary);
+    white-space: nowrap;
+  }
+
+  .meta .score {
+    font-weight: 600;
+  }
+
+  .meta .points {
     color: var(--text-tertiary);
   }
 
-  .feed-sep {
+  .meta .sep {
     opacity: 0.4;
+    margin: 0 0.15em;
   }
 
-  .feed-time {
-    opacity: 0.6;
+  .ts {
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    color: var(--text-tertiary);
+    text-align: right;
+    white-space: nowrap;
+    min-width: 5.5rem;
+  }
+
+  .feed-empty {
+    padding: var(--space-3) 0;
+  }
+
+  .feed-empty .rule {
+    height: 1px;
+    background: var(--border-primary);
+    border: 0;
+    margin: 0 0 var(--space-3);
+  }
+
+  .feed-empty-line {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    color: var(--text-secondary);
+  }
+
+  .feed-empty-line .prompt {
+    color: var(--accent-primary);
+  }
+
+  .feed-empty-msg {
+    margin: var(--space-2) 0 0;
+    font-size: var(--fs-micro);
+    color: var(--text-tertiary);
   }
 </style>

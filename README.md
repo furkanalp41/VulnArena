@@ -11,7 +11,7 @@ VulnArena is a white-box secure-code-review platform for DevSecOps teams and off
 
 ## Features
 
-- **White-box code audit** — read thousands of lines of real-world vulnerable code in C, C++, Rust, Go, Python, Node.js, Java, PHP, Ruby, C#, and more. 50 hand-crafted challenges spanning Heartbleed, Log4Shell, Shellshock, modern OWASP Top 10, and LLM/AI-era flaws.
+- **White-box code audit** — read thousands of lines of real-world vulnerable code in C, C++, Rust, Go, Python, Node.js, Java, PHP, Ruby, C#, Fortran, and more. 78 hand-crafted challenges spanning Heartbleed, Log4Shell, Shellshock, modern OWASP Top 10, LLM/AI-era flaws, and a batch of genuinely weird Fortran/HPC bugs (NAMELIST mass-assignment, EQUIVALENCE type confusion, fixed-form column-72 truncation, OpenMP races, and more).
 - **Live co-op (multiplayer)** — real-time WebSocket-backed synchronization shows remote cursors and shared line selections inside the Monaco editor so squads can audit together.
 - **AI-powered semantic evaluation** — Claude evaluates not only where the bug is but why it exists and how to remediate it. Falls back to a keyword evaluator on LLM failures so submissions are never blocked.
 - **Deterministic F1 line scoring** — every challenge ships with verified vulnerable-line indices, validated by a build-time gate (`cmd/seed -verify`) that rejects empty lines, block-comment continuations, and out-of-range indices before any DB write.
@@ -66,7 +66,7 @@ The production stack terminates TLS in nginx using a Let's Encrypt cert provisio
 ```bash
 # 1. Copy the prod env template and fill in real values
 cp .env.production.example .env
-$EDITOR .env   # DOMAIN, CERTBOT_EMAIL, POSTGRES_PASSWORD, JWT_SECRET, ...
+$EDITOR .env   # DOMAIN, CERTBOT_EMAIL, DATABASE_URL, REDIS_PASSWORD, JWT_SECRET, ...
 
 # 2. Point DNS for vulnarena.com and www.vulnarena.com at this host
 
@@ -78,7 +78,7 @@ docker compose -f docker-compose.prod.yml up -d
 
 # 5. Run migrations + seed (idempotent; safe to re-run)
 docker compose -f docker-compose.prod.yml run --rm migrate
-docker compose -f docker-compose.prod.yml run --rm api /app/seed
+docker compose -f docker-compose.prod.yml run --rm --entrypoint /app/seed api
 ```
 
 The certbot service runs `certbot renew` every 12 hours; nginx reloads on the same cadence to pick up renewed certs. No manual renewal needed.
@@ -88,7 +88,8 @@ The certbot service runs `certbot renew` every 12 hours; nginx reloads on the sa
 See `.env.production.example` for the full list. Critical ones:
 
 - `DOMAIN`, `CERTBOT_EMAIL` — for TLS issuance
-- `POSTGRES_PASSWORD`, `REDIS_PASSWORD` — strong, unique secrets
+- `DATABASE_URL` — external Neon connection string (use the `-pooler` endpoint)
+- `REDIS_PASSWORD` — strong, unique secret
 - `JWT_SECRET` — generate with `openssl rand -hex 32`
 - `ORIGIN` — must match the public URL (`https://vulnarena.com`)
 - `ALLOWED_ORIGINS` — comma-separated CORS allowlist

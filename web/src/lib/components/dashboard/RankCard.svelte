@@ -8,147 +8,138 @@
 
   let { rank }: Props = $props();
 
-  const radius = 52;
+  // Gauge geometry: a 270° arc (open at the bottom), driven by real props.
+  const radius = 70;
   const stroke = 6;
-  const circumference = 2 * Math.PI * radius;
-  const dashOffset = $derived(circumference - (rank.progress / 100) * circumference);
+  const circumference = 2 * Math.PI * radius; // ≈ 439.82
+  const arcSweep = circumference * 0.75; // 270° visible track ≈ 329.87
+  const trackGap = circumference - arcSweep; // bottom gap ≈ 109.96
+
+  const clampedProgress = $derived(Math.max(0, Math.min(100, rank.progress)));
+  const progressLen = $derived((clampedProgress / 100) * arcSweep);
 
   const glowColor = $derived(getTierColor(rank.title));
+  const xpToNext = $derived(Math.max(0, rank.next_tier_xp - rank.total_xp));
 </script>
 
-<div class="rank-card">
-  <div class="ring-container">
-    <svg width="130" height="130" viewBox="0 0 130 130" class="progress-ring">
-      <!-- Background ring -->
+<div class="gauge-wrap">
+  <div class="gauge">
+    <svg viewBox="0 0 180 180" width="160" height="160" aria-hidden="true">
+      <!-- Track -->
       <circle
-        cx="65"
-        cy="65"
+        cx="90"
+        cy="90"
         r={radius}
         fill="none"
-        stroke="var(--border-primary)"
+        stroke="var(--border-secondary)"
         stroke-width={stroke}
-        opacity="0.3"
+        stroke-dasharray="{arcSweep} {trackGap}"
+        stroke-linecap="butt"
+        transform="rotate(135 90 90)"
       />
-      <!-- Progress ring -->
+      <!-- Progress -->
       <circle
-        cx="65"
-        cy="65"
+        cx="90"
+        cy="90"
         r={radius}
         fill="none"
-        stroke={glowColor}
+        stroke="var(--accent-primary)"
         stroke-width={stroke}
-        stroke-linecap="round"
-        stroke-dasharray={circumference}
-        stroke-dashoffset={dashOffset}
+        stroke-dasharray="{progressLen} {circumference}"
+        stroke-linecap="butt"
+        transform="rotate(135 90 90)"
         class="progress-arc"
-        style:--glow-color={glowColor}
-        transform="rotate(-90 65 65)"
       />
+      <!-- Engraved start / end ticks -->
+      <line x1="47.6" y1="132.4" x2="40.5" y2="139.5" stroke="var(--text-tertiary)" stroke-width="1.5" />
+      <line x1="132.4" y1="132.4" x2="139.5" y2="139.5" stroke="var(--text-tertiary)" stroke-width="1.5" />
     </svg>
-    <div class="ring-label">
-      <span class="tier-number">T{rank.tier}</span>
+    <div class="gauge-center">
+      <div>
+        <div class="rk">{rank.title}</div>
+        <div class="tier">TIER {rank.tier}</div>
+      </div>
     </div>
   </div>
-
-  <div class="rank-info">
-    <span class="rank-title" style:color={glowColor}>{rank.title}</span>
-    <div class="xp-row">
-      <span class="xp-current">{rank.total_xp.toLocaleString()} XP</span>
-      {#if rank.next_tier_xp > 0}
-        <span class="xp-divider">/</span>
-        <span class="xp-next">{rank.next_tier_xp.toLocaleString()}</span>
-      {/if}
-    </div>
-    <div class="progress-bar">
-      <div class="progress-fill" style:width="{rank.progress}%" style:background={glowColor}></div>
-    </div>
+  <div class="gauge-side">
+    <div class="lab">Next tier</div>
+    <div class="big tnum">{clampedProgress}%</div>
+    {#if rank.next_tier_xp > 0}
+      <div class="sub">{xpToNext.toLocaleString()} XP to T{rank.tier + 1}</div>
+    {:else}
+      <div class="sub">{rank.total_xp.toLocaleString()} XP · max tier</div>
+    {/if}
   </div>
 </div>
 
 <style>
-  .rank-card {
+  .gauge-wrap {
     display: flex;
     align-items: center;
-    gap: 1.5rem;
+    gap: var(--space-5);
   }
 
-  .ring-container {
+  .gauge {
     position: relative;
-    flex-shrink: 0;
+    width: 160px;
+    height: 160px;
+    flex: 0 0 160px;
   }
 
-  .progress-ring {
+  .gauge svg {
     display: block;
-    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
   }
 
   .progress-arc {
-    transition: stroke-dashoffset 0.8s ease;
-    filter: none;
+    transition: stroke-dasharray 0.8s ease;
   }
 
-  .ring-label {
+  .gauge-center {
     position: absolute;
     inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: grid;
+    place-items: center;
+    text-align: center;
   }
 
-  .tier-number {
-    font-family: var(--font-sans);
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: 0.05em;
-  }
-
-  .rank-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
-  .rank-title {
+  .gauge-center .rk {
     font-family: var(--font-serif);
-    font-size: 0.9rem;
+    font-size: var(--fs-h4);
     font-weight: 600;
-    letter-spacing: 0.02em;
+    line-height: 1.05;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+    max-width: 6.5rem;
   }
 
-  .xp-row {
-    display: flex;
-    align-items: baseline;
-    gap: 0.25rem;
+  .gauge-center .tier {
     font-family: var(--font-mono);
-    font-size: 0.75rem;
+    font-size: var(--fs-eyebrow);
+    letter-spacing: 0.14em;
+    color: var(--accent-primary);
+    margin-top: 4px;
   }
 
-  .xp-current {
+  .gauge-side .lab {
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-tertiary);
+  }
+
+  .gauge-side .big {
+    font-family: var(--font-serif);
+    font-size: var(--fs-h4);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: var(--space-1);
+  }
+
+  .gauge-side .sub {
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
     color: var(--text-secondary);
-  }
-
-  .xp-divider {
-    color: var(--text-tertiary);
-  }
-
-  .xp-next {
-    color: var(--text-tertiary);
-    font-size: 0.7rem;
-  }
-
-  .progress-bar {
-    width: 100%;
-    height: 3px;
-    background: var(--border-primary);
-    border-radius: 2px;
-    overflow: hidden;
-    margin-top: 0.15rem;
-  }
-
-  .progress-fill {
-    height: 100%;
-    border-radius: 2px;
-    transition: width 0.8s ease;
+    margin-top: var(--space-1);
   }
 </style>

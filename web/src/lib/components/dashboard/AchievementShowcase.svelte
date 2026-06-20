@@ -40,200 +40,150 @@
         return '#d4a574';
     }
   }
+
+  function monogram(name: string): string {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '··';
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
 </script>
 
-<div class="showcase-grid">
+<div class="section-header"><h3>Achievements</h3><span class="smallcaps">earned · {safeUnlocked.length}</span></div>
+
+<div class="ach-row">
   {#each safeAll as achievement}
     {@const active = isUnlocked(achievement.slug)}
     {@const date = getUnlockDate(achievement.slug)}
     {@const glow = glowColor(achievement.category)}
-    <div
-      class="badge-card"
-      class:unlocked={active}
-      class:locked={!active}
-      style:--glow-color={glow}
-    >
-      <div class="badge-icon" title={achievement.description}>
-        {@html achievement.icon_svg}
-      </div>
-      <div class="badge-info">
-        <span class="badge-name">{achievement.name}</span>
-        {#if active && date}
-          <span class="badge-date">{date}</span>
-        {:else if !active}
-          <span class="badge-locked">Locked</span>
-        {/if}
-      </div>
-      <span class="badge-xp">+{achievement.xp_reward} XP</span>
+    <div class="ach" class:unlocked={active} class:locked={!active} style:--glow-color={glow}>
+      <div class="mark">{monogram(achievement.name)}</div>
+      <span class="alab">{achievement.name}</span>
 
       <!-- Tooltip -->
-      <div class="badge-tooltip">
-        <strong>{achievement.name}</strong>
-        <p>{achievement.description}</p>
-        <span class="tooltip-cat">{achievement.category.toUpperCase()}</span>
+      <div class="tip">
+        <b>{achievement.name}</b>
+        {achievement.description}
+        <span class="tip-meta">
+          <span class="smallcaps">{achievement.category}</span>
+          <span class="sep">·</span>
+          {#if active && date}
+            <span class="tnum">{date}</span>
+          {:else}
+            <span class="smallcaps">locked</span>
+          {/if}
+          <span class="sep">·</span>
+          <span class="tnum">+{achievement.xp_reward} XP</span>
+        </span>
       </div>
     </div>
   {/each}
 </div>
 
 <style>
-  .showcase-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: var(--space-4);
+  .ach-row {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
   }
 
-  .badge-card {
+  .ach {
     position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-4) var(--space-3);
-    border-radius: var(--radius-md);
-    background: var(--bg-secondary);
-    border: 1px solid transparent;
-    transition: all 0.25s ease;
-    cursor: default;
+    flex: 0 0 auto;
   }
 
-  .badge-card.unlocked {
-    border-color: color-mix(in srgb, var(--glow-color) 30%, transparent);
+  .ach .mark {
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-input);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    letter-spacing: 0.05em;
+    color: var(--accent-primary);
+    background: var(--bg-surface);
+    transition:
+      border-color 0.15s ease,
+      transform 0.15s ease;
   }
 
-  .badge-card.unlocked:hover {
-    border-color: color-mix(in srgb, var(--glow-color) 60%, transparent);
-    transform: scale(1.04);
-    box-shadow: var(--shadow-md);
+  .ach:hover .mark {
+    border-color: var(--accent-primary);
+    transform: translateY(1px);
   }
 
-  .badge-card.locked {
-    border-color: rgba(255, 255, 255, 0.05);
-    opacity: 0.4;
+  .ach.locked .mark {
+    color: var(--text-tertiary);
+    border-style: dashed;
   }
 
-  .badge-card.locked:hover {
-    opacity: 0.6;
+  .ach.locked:hover .mark {
+    border-color: var(--border-secondary);
+    transform: none;
   }
 
-  .badge-icon {
-    width: 72px;
-    height: 72px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-
-  .badge-card.unlocked .badge-icon {
-    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.2));
-  }
-
-  .badge-card.locked .badge-icon {
-    filter: grayscale(1) brightness(0.5);
-  }
-
-  .badge-icon :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
-
-  .badge-info {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
+  .ach .alab {
+    display: block;
     text-align: center;
-  }
-
-  .badge-name {
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: 0.03em;
-  }
-
-  .badge-date {
-    font-size: 0.6rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
     color: var(--text-tertiary);
+    letter-spacing: 0.04em;
+    margin-top: var(--space-2);
+    max-width: 64px;
   }
 
-  .badge-locked {
-    font-size: 0.6rem;
-    color: var(--text-tertiary);
-    letter-spacing: 0.1em;
-  }
-
-  .badge-xp {
-    font-size: 0.6rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-  }
-
-  .badge-card.unlocked .badge-xp {
-    color: var(--glow-color);
-  }
-
-  .badge-card.locked .badge-xp {
-    color: var(--text-tertiary);
-  }
-
-  /* Tooltip */
-  .badge-tooltip {
+  /* Tooltip — opens BELOW the mark so the top row isn't clipped */
+  .ach .tip {
     position: absolute;
-    bottom: calc(100% + 8px);
+    top: 62px;
     left: 50%;
-    transform: translateX(-50%);
-    background: var(--bg-primary);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-md);
-    padding: var(--space-3);
-    min-width: 180px;
-    max-width: 240px;
+    transform: translateX(-50%) translateY(-4px);
+    width: 180px;
+    padding: var(--space-2) var(--space-3);
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-input);
+    box-shadow: var(--shadow-lg);
+    font-size: var(--fs-micro);
+    line-height: 1.45;
+    color: var(--text-secondary);
     opacity: 0;
     visibility: hidden;
-    transition: all 0.15s ease;
-    z-index: 10;
     pointer-events: none;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    z-index: 20;
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
   }
 
-  .badge-card:hover .badge-tooltip {
+  .ach .tip b {
+    display: block;
+    margin-bottom: 2px;
+    font-family: var(--font-serif);
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+
+  .ach .tip-meta {
+    display: block;
+    margin-top: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ach .tip-meta .sep {
+    color: var(--border-secondary);
+    margin: 0 0.35em;
+  }
+
+  .ach:hover .tip {
     opacity: 1;
     visibility: visible;
-  }
-
-  .badge-tooltip strong {
-    font-size: 0.75rem;
-    color: var(--text-primary);
-    display: block;
-    margin-bottom: 4px;
-  }
-
-  .badge-tooltip p {
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    line-height: 1.4;
-    margin: 0 0 6px;
-  }
-
-  .tooltip-cat {
-    font-size: 0.6rem;
-    letter-spacing: 0.1em;
-    color: var(--text-tertiary);
-  }
-
-  @media (max-width: 600px) {
-    .showcase-grid {
-      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-      gap: var(--space-3);
-    }
-
-    .badge-icon {
-      width: 56px;
-      height: 56px;
-    }
+    transform: translateX(-50%) translateY(0);
   }
 </style>

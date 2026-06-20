@@ -39,15 +39,22 @@
     font-family: var(--font-sans);
     font-weight: 500;
     border: 1px solid transparent;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-input);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: var(--space-2);
-    transition: all var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      border-color var(--transition-fast),
+      color var(--transition-fast);
     position: relative;
-    overflow: hidden;
+  }
+
+  .btn:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
   }
 
   .btn:disabled {
@@ -71,38 +78,37 @@
     font-size: 0.875rem;
   }
 
-  /* Variants */
+  /* Variants — one quiet hover system, no decorative glows */
   .btn-primary {
-    background: var(--accent-green);
+    background: var(--accent-primary);
     color: var(--text-inverse);
-    border-color: var(--accent-green);
+    border-color: var(--accent-primary);
   }
 
   .btn-primary:hover:not(:disabled) {
-    background: var(--accent-green-dim);
-    box-shadow: var(--shadow-glow-green);
+    background: var(--accent-primary-dim);
+    border-color: var(--accent-primary-dim);
   }
 
   .btn-secondary {
     background: transparent;
-    color: var(--accent-green);
-    border-color: var(--accent-green);
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
   }
 
   .btn-secondary:hover:not(:disabled) {
-    background: var(--accent-green-glow);
+    background: var(--accent-primary-glow);
   }
 
   .btn-ghost {
     background: transparent;
     color: var(--text-secondary);
-    border-color: var(--border-primary);
+    border-color: var(--border-secondary);
   }
 
   .btn-ghost:hover:not(:disabled) {
     color: var(--text-primary);
-    border-color: var(--border-secondary);
-    background: var(--bg-hover);
+    border-color: var(--accent-primary);
   }
 
   .btn-danger {
@@ -113,7 +119,7 @@
 
   .btn-danger:hover:not(:disabled) {
     background: var(--accent-red-dim);
-    box-shadow: 0 2px 8px rgba(201, 114, 107, 0.15);
+    border-color: var(--accent-red-dim);
   }
 
   /* Spinner */

@@ -40,7 +40,7 @@ func main() {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://vulnarena:vulnarena_secret@localhost:5432/vulnarena?sslmode=disable"
+		log.Fatal("DATABASE_URL is required")
 	}
 
 	ctx := context.Background()
@@ -164,6 +164,7 @@ func ensureExtraLookups(ctx context.Context, pool *pgxpool.Pool) {
 	langs := []struct{ slug, name string }{
 		{"php", "PHP"},
 		{"bash", "Bash / Shell"},
+		{"fortran", "Fortran"},
 	}
 	for _, l := range langs {
 		_, _ = pool.Exec(ctx,
@@ -209,7 +210,8 @@ func buildChallenges() []challengeSeed {
 	}
 	all := append(base, buildCVEChallenges()...)
 	all = append(all, buildModernChallenges()...)
-	return append(all, buildOSCPChallenges()...)
+	all = append(all, buildOSCPChallenges()...)
+	return append(all, buildFortranChallenges()...)
 }
 
 // ──────────────────────────────────────────────────
@@ -698,13 +700,13 @@ critical parsing to a memory-safe language.`,
 // ──────────────────────────────────────────────────
 func challenge4_FlaskSQLi() challengeSeed {
 	return challengeSeed{
-		title:        "The Leaky ORM — Flask Product Search",
-		slug:         "flask-sqli-leaky-orm",
-		difficulty:   3,
-		langSlug:     "python",
-		catSlug:      "injection",
-		points:       200,
-		cveReference: "CVE-2019-7164 (SQLAlchemy text() misuse pattern)",
+		title:           "The Leaky ORM — Flask Product Search",
+		slug:            "flask-sqli-leaky-orm",
+		difficulty:      3,
+		langSlug:        "python",
+		catSlug:         "injection",
+		points:          200,
+		cveReference:    "CVE-2019-7164 (SQLAlchemy text() misuse pattern)",
 		vulnerableLines: []int{47, 48, 49, 50},
 		description: `A Flask e-commerce application exposes a product search endpoint.
 The developer uses SQLAlchemy but bypasses the ORM's built-in protection
@@ -917,13 +919,13 @@ Additional defense-in-depth:
 // ──────────────────────────────────────────────────
 func challenge5_RustMemory() challengeSeed {
 	return challengeSeed{
-		title:        "Unsafe Territory — Rust Cache Corruption",
-		slug:         "rust-unsafe-memory-cache",
-		difficulty:   7,
-		langSlug:     "rust",
-		catSlug:      "memory-corruption",
-		points:       500,
-		cveReference: "CVE-2022-21658 (unsafe memory pattern in Rust)",
+		title:           "Unsafe Territory — Rust Cache Corruption",
+		slug:            "rust-unsafe-memory-cache",
+		difficulty:      7,
+		langSlug:        "rust",
+		catSlug:         "memory-corruption",
+		points:          500,
+		cveReference:    "CVE-2022-21658 (unsafe memory pattern in Rust)",
 		vulnerableLines: []int{63, 64, 65, 95, 96, 98, 99, 103, 104},
 		description: `A high-performance Rust cache server uses unsafe code blocks to achieve
 zero-copy deserialization and manual memory management for hot-path
@@ -1161,13 +1163,13 @@ Better long-term approach:
 // ──────────────────────────────────────────────────
 func challenge6_CppRCE() challengeSeed {
 	return challengeSeed{
-		title:        "The Shape Shifter — C++ Plugin Loader RCE",
-		slug:         "cpp-deser-rce-plugin-loader",
-		difficulty:   10,
-		langSlug:     "cpp",
-		catSlug:      "insecure-deser",
-		points:       800,
-		cveReference: "CVE-2021-22555 (type confusion / object lifecycle pattern)",
+		title:           "The Shape Shifter — C++ Plugin Loader RCE",
+		slug:            "cpp-deser-rce-plugin-loader",
+		difficulty:      10,
+		langSlug:        "cpp",
+		catSlug:         "insecure-deser",
+		points:          800,
+		cveReference:    "CVE-2021-22555 (type confusion / object lifecycle pattern)",
 		vulnerableLines: []int{91, 92, 93, 94, 95, 98, 111, 113, 114, 115, 116},
 		description: `A C++ application server implements a plugin system that loads and
 executes user-uploaded "analysis modules." The modules are serialized C++

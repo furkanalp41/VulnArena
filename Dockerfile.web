@@ -16,32 +16,18 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY web/ .
 
-# Install adapter-node for production SSR
-RUN npm install @sveltejs/adapter-node
-
-# Override svelte config to use adapter-node
-RUN cat > svelte.config.js <<'EOF'
-import adapter from '@sveltejs/adapter-node';
-
-/** @type {import('@sveltejs/kit').Config} */
-const config = {
-  compilerOptions: {
-    runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
-  },
-  kit: {
-    adapter: adapter({
-      out: 'build',
-      precompress: true,
-    })
-  }
-};
-
-export default config;
-EOF
-
+# svelte.config.js already uses @sveltejs/adapter-node (pinned in package.json /
+# package-lock.json), so the build produces a standalone Node server under build/.
 RUN npm run build
 
-# --- Stage 3: Runtime ---
+# --- Stage 3: Production dependencies ---
+FROM node:22-alpine AS prod-deps
+
+WORKDIR /app
+COPY web/package.json web/package-lock.json* ./
+RUN npm ci --omit=dev
+
+# --- Stage 4: Runtime ---
 FROM node:22-alpine
 
 RUN addgroup -S vulnarena && adduser -S vulnarena -G vulnarena
@@ -49,6 +35,7 @@ RUN addgroup -S vulnarena && adduser -S vulnarena -G vulnarena
 WORKDIR /app
 
 COPY --from=builder /app/build ./build
+COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=builder /app/package.json .
 
 ENV NODE_ENV=production

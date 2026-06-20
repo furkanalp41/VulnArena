@@ -71,10 +71,12 @@
     padding: var(--space-3) var(--space-4);
     background: var(--bg-input);
     border: 1px solid var(--border-primary);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-input);
     color: var(--text-primary);
     outline: none;
-    transition: all var(--transition-fast);
+    transition:
+      border-color var(--transition-fast),
+      box-shadow var(--transition-fast);
     width: 100%;
   }
 
@@ -83,8 +85,8 @@
   }
 
   .input-field:focus {
-    border-color: var(--accent-green);
-    box-shadow: 0 0 0 2px var(--accent-green-glow);
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px var(--accent-primary-glow);
   }
 
   .input-field:disabled {

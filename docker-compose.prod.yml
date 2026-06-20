@@ -34,7 +34,7 @@ services:
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-168h}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-20250514}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-sonnet-4-6}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://vulnarena.com,https://www.vulnarena.com}
       # Neon's pooler endpoint is pgbouncer in transaction mode. Keep the
@@ -46,8 +46,10 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
       interval: 10s
       timeout: 3s
       start_period: 10s
@@ -63,7 +65,10 @@ services:
     container_name: vulnarena-migrate
     entrypoint: ["/app/migrate", "-direction", "up"]
     environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required (Neon connection string)}
+      # Prefer the Neon DIRECT (non-pooler) endpoint for migrations — golang-migrate's
+      # advisory lock can stall over Neon's pgbouncer pooler. Falls back to the pooler
+      # DATABASE_URL when MIGRATE_DATABASE_URL is unset.
+      DATABASE_URL: ${MIGRATE_DATABASE_URL:-${DATABASE_URL}}
     restart: "no"
     networks:
       - backend

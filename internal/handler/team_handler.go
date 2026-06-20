@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -56,7 +57,8 @@ func (h *TeamHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 
 	team, err := h.teamService.CreateTeam(r.Context(), userID, input)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		slog.Error("create team failed", slog.String("user_id", userID.String()), slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, "could not create team")
 		return
 	}
 
@@ -72,7 +74,8 @@ func (h *TeamHandler) JoinTeam(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.teamService.JoinTeam(r.Context(), userID, tag); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		slog.Error("join team failed", slog.String("user_id", userID.String()), slog.String("tag", tag), slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, "could not join team")
 		return
 	}
 
@@ -83,7 +86,8 @@ func (h *TeamHandler) LeaveTeam(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 
 	if err := h.teamService.LeaveTeam(r.Context(), userID); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		slog.Error("leave team failed", slog.String("user_id", userID.String()), slog.Any("error", err))
+		writeError(w, http.StatusInternalServerError, "could not leave team")
 		return
 	}
 

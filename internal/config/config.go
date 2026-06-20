@@ -65,6 +65,19 @@ func Load() (*Config, error) {
 	if jwtSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
+	if len(jwtSecret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters")
+	}
+	weakSecrets := map[string]bool{
+		"change-me":        true,
+		"changeme":         true,
+		"CHANGE_ME":        true,
+		"your-secret-here": true,
+		"secret":           true,
+	}
+	if weakSecrets[jwtSecret] {
+		return nil, fmt.Errorf("JWT_SECRET must not be a placeholder value")
+	}
 	cfg.JWT.Secret = jwtSecret
 
 	accessTTL, err := time.ParseDuration(getEnv("JWT_ACCESS_TTL", "15m"))
@@ -82,7 +95,7 @@ func Load() (*Config, error) {
 	// Anthropic (optional — falls back to keyword evaluator if absent)
 	cfg.Anthropic = AnthropicConfig{
 		APIKey: getEnv("ANTHROPIC_API_KEY", ""),
-		Model:  getEnv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
+		Model:  getEnv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
 	}
 
 	// Discord webhook (optional — disabled if empty)

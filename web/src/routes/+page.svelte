@@ -1,207 +1,216 @@
 <script lang="ts">
   import Button from '$lib/components/ui/Button.svelte';
   import { isAuthenticated } from '$lib/stores/auth';
+
+  const languages = ['Go', 'Rust', 'Node.js', 'C#', 'C', 'C++', 'Assembly', 'Perl', 'COBOL', 'Fortran', 'Flutter'];
 </script>
 
-<div class="landing">
+<div class="landing shell">
   <section class="hero">
-    <div class="hero-badge">Cybersecurity training platform</div>
+    <span class="eyebrow">Secure-code-review platform</span>
     <h1 class="hero-title">
-      Find the <span class="accent">vulnerability</span>.<br />
-      Write the <span class="accent">fix</span>.
+      Find the <span class="ink">vulnerability</span>.<br />
+      Write the <span class="ink">fix</span>.
     </h1>
-    <p class="hero-subtitle">
-      Interactive code challenges across 10+ languages. From basic injection flaws
-      to advanced memory corruption in legacy systems. AI-powered assessment that
-      understands your reasoning.
+    <p class="hero-sub">
+      A white-box training ground: read real vulnerable code in eleven languages,
+      mark the lines that bite, and explain the flaw in your own words for semantic assessment.
     </p>
-    <div class="hero-actions">
+    <div class="hero-cta">
       {#if $isAuthenticated}
-        <a href="/arena">
-          <Button variant="primary" size="lg">Enter the Arena</Button>
-        </a>
-        <a href="/academy">
-          <Button variant="secondary" size="lg">Start Learning</Button>
-        </a>
+        <a href="/arena"><Button variant="primary" size="lg">Enter the Arena</Button></a>
+        <a href="/academy"><Button variant="ghost" size="lg">Browse the Academy</Button></a>
       {:else}
-        <a href="/register">
-          <Button variant="primary" size="lg">Get Started</Button>
-        </a>
-        <a href="/login">
-          <Button variant="ghost" size="lg">Sign In</Button>
-        </a>
+        <a href="/register"><Button variant="primary" size="lg">Start an audit</Button></a>
+        <a href="/login"><Button variant="ghost" size="lg">Sign in</Button></a>
       {/if}
     </div>
   </section>
 
-  <section class="features">
-    <div class="feature-card">
-      <div class="feature-icon">&gt;_</div>
-      <h3 class="feature-title">The Arena</h3>
-      <p class="feature-desc">
-        Hunt vulnerabilities in real-world code. SQLi, RCE, memory corruption,
-        race conditions. Difficulty 1 through 10.
-      </p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">[]</div>
-      <h3 class="feature-title">The Academy</h3>
-      <p class="feature-desc">
-        Deep-dive breakdowns of how vulnerabilities manifest at the function level.
-        From OWASP Top 10 to COBOL mainframes.
-      </p>
-    </div>
-    <div class="feature-card">
-      <div class="feature-icon">{'{}'}</div>
-      <h3 class="feature-title">Semantic Assessment</h3>
-      <p class="feature-desc">
-        No exact-match grading. Our NLP engine understands your reasoning.
-        Explain the vuln in your own words.
-      </p>
-    </div>
-  </section>
+  <div class="features">
+    <article class="feature">
+      <div class="numeral" aria-hidden="true">I</div>
+      <h3>The Arena</h3>
+      <p>Real CVEs and planted bugs, set in readable code. Flag the lines, then defend your reasoning in prose.</p>
+    </article>
+    <article class="feature">
+      <div class="numeral" aria-hidden="true">II</div>
+      <h3>The Academy</h3>
+      <p>Long-form write-ups that turn each class of flaw into something you can recognise on sight — from OWASP Top 10 to COBOL mainframes and Fortran HPC kernels.</p>
+    </article>
+    <article class="feature">
+      <div class="numeral" aria-hidden="true">III</div>
+      <h3>Semantic Assessment</h3>
+      <p>Explain the vulnerability in your own words. Claude grades meaning, not keywords — partial credit for partial insight.</p>
+    </article>
+  </div>
 
-  <section class="languages">
-    <p class="lang-label">Supported languages</p>
-    <div class="lang-grid">
-      {#each ['Go', 'Rust', 'Node.js', 'C#', 'C', 'C++', 'Assembly', 'Perl', 'COBOL', 'Flutter'] as lang}
-        <span class="lang-tag">{lang}</span>
+  <div class="langs">
+    <span class="smallcaps">Eleven languages, one discipline</span>
+    <div class="lang-list">
+      {#each languages as lang}
+        <span>{lang}</span>
       {/each}
     </div>
-  </section>
+  </div>
+
+  <footer class="colophon">
+    <span>VulnArena — a journal of secure code review</span>
+    <span>Set in Source Serif 4 · Inter · JetBrains Mono</span>
+  </footer>
 </div>
 
 <style>
   .landing {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-16);
-    padding: var(--space-12) 0;
+    padding: var(--space-12) 0 var(--space-8);
   }
 
   .hero {
-    text-align: center;
-    max-width: 720px;
-    margin: 0 auto;
-  }
-
-  .hero-badge {
-    display: inline-block;
-    font-family: var(--font-sans);
-    font-size: 0.6875rem;
-    color: var(--text-secondary);
-    border: 1px solid var(--border-primary);
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-sm);
-    margin-bottom: var(--space-6);
+    padding: var(--space-8) 0 var(--space-10);
+    max-width: 760px;
   }
 
   .hero-title {
     font-family: var(--font-serif);
-    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-size: var(--fs-display);
     font-weight: 700;
-    line-height: 1.15;
+    line-height: 1.06;
+    letter-spacing: -0.02em;
     color: var(--text-primary);
-    margin-bottom: var(--space-5);
+    margin: var(--space-4) 0 var(--space-5);
+    text-wrap: balance;
   }
 
-  .accent {
+  .hero-title .ink {
     color: var(--accent-primary);
   }
 
-  .hero-subtitle {
-    font-size: 1.0625rem;
+  .hero-sub {
+    font-size: var(--fs-lead);
     color: var(--text-secondary);
-    line-height: 1.7;
-    margin-bottom: var(--space-8);
+    line-height: 1.5;
+    max-width: 56ch;
   }
 
-  .hero-actions {
+  .hero-cta {
     display: flex;
-    gap: var(--space-4);
-    justify-content: center;
+    gap: var(--space-3);
+    margin-top: var(--space-6);
     flex-wrap: wrap;
   }
 
-  .hero-actions a {
+  .hero-cta a {
     text-decoration: none;
   }
 
+  /* Three features divided by hairline rules, not boxes. */
   .features {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: var(--space-6);
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border-top: 1px solid var(--border-primary);
   }
 
-  .feature-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
-    padding: var(--space-8);
-    transition: all var(--transition-base);
+  .feature {
+    padding: var(--space-6) var(--space-5) var(--space-6) 0;
+    border-right: 1px solid var(--border-primary);
   }
 
-  .feature-card:hover {
-    border-color: var(--border-secondary);
-    transform: translateY(-2px);
+  .feature:last-child {
+    border-right: 0;
+    padding-right: 0;
   }
 
-  .feature-icon {
-    font-size: 1.5rem;
-    color: var(--text-secondary);
-    margin-bottom: var(--space-4);
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-tertiary);
-    border-radius: var(--radius-md);
+  .feature:not(:first-child) {
+    padding-left: var(--space-5);
   }
 
-  .feature-title {
+  .numeral {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border-secondary);
+    border-radius: var(--radius-input);
     font-family: var(--font-serif);
-    font-size: 1rem;
+    font-size: 0.95rem;
+    color: var(--accent-primary);
+    letter-spacing: 0.04em;
+    margin-bottom: var(--space-4);
+  }
+
+  .feature h3 {
+    font-family: var(--font-serif);
+    font-size: var(--fs-h4);
     font-weight: 600;
+    letter-spacing: -0.01em;
     color: var(--text-primary);
     margin-bottom: var(--space-2);
   }
 
-  .feature-desc {
-    font-size: 0.875rem;
+  .feature p {
     color: var(--text-secondary);
+    font-size: var(--fs-body);
     line-height: 1.6;
   }
 
-  .languages {
-    text-align: center;
+  .langs {
+    padding: var(--space-6) 0;
+    border-top: 1px solid var(--border-primary);
+    margin-top: var(--space-8);
   }
 
-  .lang-label {
-    font-family: var(--font-sans);
-    font-size: 0.6875rem;
-    color: var(--text-tertiary);
-    margin-bottom: var(--space-4);
-  }
-
-  .lang-grid {
+  .lang-list {
     display: flex;
     flex-wrap: wrap;
-    gap: var(--space-2);
-    justify-content: center;
+    gap: 0;
+    margin-top: var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
   }
 
-  .lang-tag {
-    font-size: 0.75rem;
+  .lang-list span {
     color: var(--text-secondary);
-    border: 1px solid var(--border-primary);
-    padding: var(--space-1) var(--space-3);
-    border-radius: var(--radius-sm);
-    transition: all var(--transition-fast);
+    letter-spacing: 0.02em;
   }
 
-  .lang-tag:hover {
-    color: var(--text-primary);
-    border-color: var(--border-secondary);
+  .lang-list span:not(:last-child)::after {
+    content: '·';
+    color: var(--text-tertiary);
+    margin: 0 0.7em;
+  }
+
+  .colophon {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    border-top: 1px solid var(--border-primary);
+    margin-top: var(--space-6);
+    padding-top: var(--space-5);
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    letter-spacing: 0.06em;
+    color: var(--text-tertiary);
+  }
+
+  @media (max-width: 880px) {
+    .features {
+      grid-template-columns: 1fr;
+    }
+
+    .feature {
+      border-right: 0;
+      border-bottom: 1px solid var(--border-primary);
+      padding: var(--space-5) 0;
+    }
+
+    .feature:not(:first-child) {
+      padding-left: 0;
+    }
+
+    .hero-title {
+      font-size: 2.4rem;
+    }
   }
 </style>

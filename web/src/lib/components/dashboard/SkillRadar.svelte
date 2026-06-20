@@ -53,103 +53,98 @@
 </script>
 
 {#if skills.length > 0}
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 {size} {size}"
-    class="radar-chart"
-  >
-    <!-- Grid levels -->
-    {#each Array(levels) as _, level}
-      <polygon
-        points={gridPath(level + 1)}
-        class="grid-ring"
-        style:opacity={0.15 + level * 0.05}
-      />
-    {/each}
+  <div class="radar-wrap">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 {size} {size}"
+      class="radar"
+      aria-hidden="true"
+    >
+      <!-- Grid levels -->
+      {#each Array(levels) as _, level}
+        <polygon points={gridPath(level + 1)} class="grid-ring" />
+      {/each}
 
-    <!-- Axis lines -->
-    {#each skills as _, i}
-      {@const [ex, ey] = axisEnd(i)}
-      <line x1={center} y1={center} x2={ex} y2={ey} class="axis-line" />
-    {/each}
+      <!-- Axis lines -->
+      {#each skills as _, i}
+        {@const [ex, ey] = axisEnd(i)}
+        <line x1={center} y1={center} x2={ex} y2={ey} class="axis-line" />
+      {/each}
 
-    <!-- Data polygon -->
-    <polygon
-      points={dataPath()}
-      class="data-fill"
-    />
-    <polygon
-      points={dataPath()}
-      class="data-stroke"
-    />
+      <!-- Data polygon -->
+      <polygon points={dataPath()} class="data-poly" />
 
-    <!-- Data points -->
-    {#each skills as skill, i}
-      {@const r = (skill.score / 100) * maxRadius}
-      {@const [px, py] = polarToXY(i * angleStep, r)}
-      <circle cx={px} cy={py} r="3.5" class="data-point" />
-    {/each}
+      <!-- Data points -->
+      {#each skills as skill, i}
+        {@const r = (skill.score / 100) * maxRadius}
+        {@const [px, py] = polarToXY(i * angleStep, r)}
+        <circle cx={px} cy={py} r="2.5" class="data-point" />
+      {/each}
 
-    <!-- Labels -->
-    {#each skills as skill, i}
-      {@const lp = labelPos(i)}
-      <text
-        x={lp.x}
-        y={lp.y}
-        text-anchor={lp.anchor}
-        class="axis-label"
-      >
-        {skill.category.length > 14 ? skill.category.slice(0, 12) + '…' : skill.category}
-      </text>
-    {/each}
-  </svg>
+      <!-- Labels -->
+      {#each skills as skill, i}
+        {@const lp = labelPos(i)}
+        <text
+          x={lp.x}
+          y={lp.y}
+          text-anchor={lp.anchor}
+          class="axis-label"
+        >
+          {skill.category.length > 14 ? skill.category.slice(0, 12) + '…' : skill.category}
+        </text>
+      {/each}
+    </svg>
+  </div>
 {:else}
   <div class="radar-empty">
-    <p>No data yet</p>
+    <p class="eyebrow">No data yet</p>
     <p class="radar-empty-sub">Solve challenges to see your skill profile</p>
   </div>
 {/if}
 
 <style>
-  .radar-chart {
+  .radar-wrap {
+    display: flex;
+    justify-content: center;
+    padding: var(--space-2) 0;
+  }
+
+  .radar {
     display: block;
-    margin: 0 auto;
   }
 
   .grid-ring {
     fill: none;
     stroke: var(--border-primary);
-    stroke-width: 1;
+    stroke-width: 0.7;
   }
 
   .axis-line {
     stroke: var(--border-primary);
-    stroke-width: 0.5;
-    opacity: 0.4;
+    stroke-width: 0.6;
   }
 
-  .data-fill {
-    fill: rgba(212, 165, 116, 0.12);
-  }
-
-  .data-stroke {
-    fill: none;
-    stroke: var(--accent-green);
-    stroke-width: 2;
+  .data-poly {
+    fill: var(--accent-primary);
+    fill-opacity: 0.14;
+    stroke: var(--accent-primary);
+    stroke-width: 1.5;
     stroke-linejoin: round;
   }
 
   .data-point {
-    fill: var(--accent-green);
-    stroke: var(--bg-primary);
-    stroke-width: 1.5;
+    fill: var(--accent-primary);
+    stroke: var(--bg-surface);
+    stroke-width: 1;
   }
 
   .axis-label {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 9px;
-    fill: var(--text-tertiary);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    fill: var(--text-secondary);
   }
 
   .radar-empty {
@@ -158,18 +153,13 @@
     align-items: center;
     justify-content: center;
     height: 200px;
-    gap: 0.5rem;
-  }
-
-  .radar-empty p:first-child {
-    font-size: 0.75rem;
-    color: var(--text-tertiary);
-    letter-spacing: 0.1em;
+    gap: var(--space-2);
+    text-align: center;
   }
 
   .radar-empty-sub {
-    font-size: 0.75rem;
+    font-family: var(--font-serif);
+    font-size: var(--fs-micro);
     color: var(--text-tertiary);
-    opacity: 0.6;
   }
 </style>

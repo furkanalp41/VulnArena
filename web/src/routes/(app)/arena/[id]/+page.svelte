@@ -176,8 +176,8 @@
     showTerminal = true;
     activeTab = 'results';
     terminalLines = [
-      '> Establishing secure connection to SAST engine...',
-      `> Transmitting code audit (${targetLines.length} target lines)...`,
+      '> Opening analysis session...',
+      `> Submitting audit (${targetLines.length} flagged lines)...`,
     ];
 
     try {
@@ -268,8 +268,8 @@
       <div class="header-right">
         {#if coopActive && coopMembers.length > 0}
           <div class="squad-indicator">
-            <span class="squad-icon">&gt;&gt;</span>
-            Squad linked ({coopMembers.length + 1})
+            <span class="squad-icon">·</span>
+            Squad · {coopMembers.length + 1} linked
             <div class="squad-avatars">
               {#each coopMembers as member}
                 <span class="squad-member" style="border-color: {member.color}" title={member.displayName}>
@@ -280,8 +280,8 @@
           </div>
         {:else if coopActive}
           <div class="squad-indicator solo">
-            <span class="squad-icon">&gt;&gt;</span>
-            Squad linked (solo)
+            <span class="squad-icon">·</span>
+            Squad · solo
           </div>
         {/if}
         {#if targetLines.length > 0}
@@ -298,8 +298,8 @@
       <!-- Code Editor - takes majority of space -->
       <div class="code-pane">
         <div class="code-header">
-          <span class="code-label">Source Code Audit</span>
-          <span class="code-hint">Click line numbers to flag vulnerable lines</span>
+          <span class="code-label">Source — read-only</span>
+          <span class="code-hint">Click line numbers to flag the vulnerable lines</span>
         </div>
         <div class="code-editor-area">
           <CodeEditor
@@ -342,7 +342,7 @@
           {#if activeTab === 'brief'}
             <div class="tab-scroll">
               <div class="briefing-section">
-                <h3 class="section-label">Mission Briefing</h3>
+                <h3 class="section-label">Briefing</h3>
                 <div class="briefing-text">
                   {#each challenge.description.split('\n') as line}
                     {#if line.trim()}
@@ -413,13 +413,13 @@
               {/if}
 
               <div class="how-to-section">
-                <h3 class="section-label">How to Audit</h3>
+                <h3 class="section-label">How to audit</h3>
                 <ol class="how-to-list">
-                  <li>Review the source code in the editor</li>
-                  <li>Click line numbers to flag vulnerable lines</li>
-                  <li>Switch to SUBMIT tab</li>
+                  <li>Read the source in the editor</li>
+                  <li>Click line numbers to flag the vulnerable lines</li>
+                  <li>Switch to the Submit tab</li>
                   <li>Describe the vulnerability and propose a fix</li>
-                  <li>Submit for SAST analysis scoring</li>
+                  <li>Submit for semantic assessment</li>
                 </ol>
               </div>
             </div>
@@ -463,7 +463,7 @@
 
               <!-- Analysis Text -->
               <div class="analysis-section">
-                <h3 class="section-label">Vulnerability Analysis</h3>
+                <h3 class="section-label">Your analysis</h3>
                 <p class="analysis-hint">Identify the vulnerability class, explain the attack vector, and propose a concrete fix.</p>
                 <textarea
                   class="analysis-input font-mono"
@@ -554,7 +554,7 @@
 
               {#if showTerminal}
                 <div class="terminal-area">
-                  <Terminal lines={terminalLines} title="SAST ANALYSIS ENGINE" animate={true} />
+                  <Terminal lines={terminalLines} title="Analysis log" animate={true} />
                 </div>
               {/if}
             </div>
@@ -813,10 +813,12 @@
   }
 
   .code-label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-tertiary);
   }
 
   .code-hint {
@@ -848,25 +850,28 @@
 
   .panel-tab {
     flex: 1;
-    padding: var(--space-2) var(--space-3);
-    font-family: var(--font-sans);
-    font-size: 0.8125rem;
+    padding: var(--space-3) var(--space-3);
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     color: var(--text-tertiary);
     background: none;
     border: none;
     cursor: pointer;
-    transition: all var(--transition-fast);
+    transition:
+      color var(--transition-fast),
+      border-color var(--transition-fast);
     border-bottom: 2px solid transparent;
   }
 
   .panel-tab:hover:not(:disabled) {
     color: var(--text-secondary);
-    background: var(--bg-tertiary);
   }
 
   .panel-tab.active {
-    color: var(--accent-green);
-    border-bottom-color: var(--accent-green);
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
   }
 
   .panel-tab:disabled {
@@ -891,11 +896,15 @@
 
   /* Briefing */
   .section-label {
-    font-family: var(--font-serif);
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: var(--space-2);
+    font-family: var(--font-mono);
+    font-size: var(--fs-label);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-tertiary);
+    margin-bottom: var(--space-3);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-primary);
     display: flex;
     align-items: center;
     gap: var(--space-2);

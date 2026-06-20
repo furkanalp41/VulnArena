@@ -3,7 +3,6 @@
   import { currentUser } from '$lib/stores/auth';
   import { getDashboardProfile, type DashboardProfile } from '$lib/api/dashboard';
   import { getAllAchievements, type Achievement } from '$lib/api/achievements';
-  import Card from '$lib/components/ui/Card.svelte';
   import Button from '$lib/components/ui/Button.svelte';
   import DifficultyBadge from '$lib/components/ui/DifficultyBadge.svelte';
   import RankCard from '$lib/components/dashboard/RankCard.svelte';
@@ -44,132 +43,125 @@
     <span>{error}</span>
   </div>
 {:else if profile}
-  <div class="dashboard">
-    <!-- Header -->
-    <header class="dash-header">
-      <div>
-        <h1 class="dash-title">
-          Welcome back, <span class="accent">{$currentUser?.display_name || $currentUser?.username}</span>
-        </h1>
-        <p class="dash-subtitle">Dashboard</p>
+  <div class="shell page">
+    <!-- Page head -->
+    <div class="page-head">
+      <span class="eyebrow">Operator · {$currentUser?.display_name || $currentUser?.username}</span>
+      <h1>Dashboard</h1>
+    </div>
+
+    <!-- Career ledger -->
+    <div class="ledger" role="group" aria-label="Career figures">
+      <div class="ledger-cell">
+        <div class="lab">Solved</div>
+        <div class="fig tnum">{profile.stats.total_solved}<small>/ {profile.stats.total_available}</small></div>
       </div>
-    </header>
-
-    <!-- Top row: Rank + Stats -->
-    <div class="top-row">
-      <Card variant="elevated" padding="lg">
-        <div class="section-header">Rank</div>
-        <RankCard rank={profile.rank} />
-      </Card>
-
-      <div class="stats-grid">
-        <Card variant="default">
-          <div class="stat">
-            <span class="stat-value accent">{profile.stats.total_solved}</span>
-            <span class="stat-label">Solved</span>
-            <span class="stat-sub">/ {profile.stats.total_available}</span>
-          </div>
-        </Card>
-        <Card variant="default">
-          <div class="stat">
-            <span class="stat-value" style="color: var(--accent-blue)">{profile.stats.current_streak}</span>
-            <span class="stat-label">Day Streak</span>
-          </div>
-        </Card>
-        <Card variant="default">
-          <div class="stat">
-            <span class="stat-value" style="color: var(--accent-purple)">{profile.stats.lessons_read}</span>
-            <span class="stat-label">Lessons</span>
-          </div>
-        </Card>
-        <Card variant="default">
-          <div class="stat">
-            <span class="stat-value" style="color: var(--accent-yellow)">{profile.stats.average_score}<span class="stat-unit">%</span></span>
-            <span class="stat-label">Avg Score</span>
-          </div>
-        </Card>
+      <div class="ledger-cell">
+        <div class="lab">Streak</div>
+        <div class="fig tnum">{profile.stats.current_streak}<small>days</small></div>
+      </div>
+      <div class="ledger-cell">
+        <div class="lab">Lessons</div>
+        <div class="fig tnum">{profile.stats.lessons_read}</div>
+      </div>
+      <div class="ledger-cell">
+        <div class="lab">Avg Score</div>
+        <div class="fig tnum">{profile.stats.average_score}<small>%</small></div>
       </div>
     </div>
 
-    <!-- Achievement Showcase -->
-    {#if allAchievements.length > 0}
-      <div class="achievements-section">
-        <h2 class="section-header">Achievement Showcase</h2>
-        <AchievementShowcase unlocked={profile.achievements ?? []} all={allAchievements} />
+    <!-- Two-column dashboard grid -->
+    <div class="dash-grid">
+      <div class="dash-col">
+        <!-- Rank -->
+        <div class="card">
+          <div class="section-header"><h3>Rank</h3><span class="smallcaps">tier gauge</span></div>
+          <RankCard rank={profile.rank} />
+        </div>
+
+        <!-- Recent Activity -->
+        <div class="card">
+          <div class="section-header"><h3>Recent activity</h3><span class="smallcaps">$ log --tail</span></div>
+          <ActivityFeed activities={profile.recent_activity ?? []} />
+        </div>
       </div>
-    {/if}
 
-    <!-- Middle row: Radar + Activity -->
-    <div class="mid-row">
-      <Card variant="elevated" padding="lg">
-        <div class="section-header">Skill Radar</div>
-        <SkillRadar skills={profile.skill_radar ?? []} />
-      </Card>
+      <div class="dash-col">
+        <!-- Skill Radar -->
+        <div class="card">
+          <div class="section-header"><h3>Skill profile</h3><span class="smallcaps">six axes</span></div>
+          <SkillRadar skills={profile.skill_radar ?? []} />
+        </div>
 
-      <Card variant="elevated" padding="sm">
-        <div class="section-header" style="padding: 0.5rem 0.75rem 0;">Recent Activity</div>
-        <ActivityFeed activities={profile.recent_activity ?? []} />
-      </Card>
-    </div>
+        <!-- Achievement Showcase -->
+        {#if allAchievements.length > 0}
+          <div class="card">
+            <div class="section-header"><h3>Achievements</h3><span class="smallcaps">earned · {(profile.achievements ?? []).length}</span></div>
+            <AchievementShowcase unlocked={profile.achievements ?? []} all={allAchievements} />
+          </div>
+        {/if}
 
-    <!-- Jump Back In -->
-    {#if profile.next_challenge}
-      <div class="jump-section">
-        <h2 class="section-header">Jump Back In</h2>
-        <a href="/arena/{profile.next_challenge.id}" class="jump-card">
-          <Card variant="bordered">
-            <div class="jump-content">
-              <div class="jump-left">
+        <!-- Jump Back In -->
+        {#if profile.next_challenge}
+          <div class="card">
+            <div class="section-header"><h3>Jump back in</h3><span class="smallcaps">next audit</span></div>
+            <a href="/arena/{profile.next_challenge.id}" class="jump-card">
+              <div class="jump-content">
                 <div class="jump-info">
-                  <h3>{profile.next_challenge.title}</h3>
+                  <h3 class="jump-title">{profile.next_challenge.title}</h3>
                   <div class="jump-meta">
                     <DifficultyBadge level={profile.next_challenge.difficulty} />
                     <span class="jump-lang">{profile.next_challenge.language?.name ?? ''}</span>
                     <span class="jump-cat">{profile.next_challenge.vuln_category?.name ?? ''}</span>
-                    <span class="jump-pts">+{profile.next_challenge.points} XP</span>
+                    <span class="jump-pts tnum">+{profile.next_challenge.points} XP</span>
                   </div>
                 </div>
+                <Button variant="primary" size="sm">Start Challenge</Button>
               </div>
-              <Button variant="primary" size="sm">Start Challenge</Button>
-            </div>
-          </Card>
-        </a>
-      </div>
-    {:else}
-      <Card variant="bordered">
-        <div class="all-done">
-          <span class="accent">All challenges completed. More incoming.</span>
-        </div>
-      </Card>
-    {/if}
+            </a>
+          </div>
+        {:else}
+          <div class="card">
+            <div class="all-done">All challenges completed. More incoming.</div>
+          </div>
+        {/if}
 
-    <!-- Quick Links -->
-    <div class="quick-links">
-      <a href="/arena" class="action-card">
-        <Card variant="bordered">
-          <div class="action-content">
-            <h3>Arena</h3>
-            <p>Browse all vulnerability challenges</p>
+        <!-- Quick Links -->
+        <div class="card">
+          <div class="section-header"><h3>Jump to</h3><span class="smallcaps">sections</span></div>
+          <div class="quick-links">
+            <a href="/arena" class="action-card">
+              <h3>Arena</h3>
+              <p>Browse all vulnerability challenges</p>
+            </a>
+            <a href="/academy" class="action-card">
+              <h3>Academy</h3>
+              <p>Deep-dive into secure coding lessons</p>
+            </a>
           </div>
-        </Card>
-      </a>
-      <a href="/academy" class="action-card">
-        <Card variant="bordered">
-          <div class="action-content">
-            <h3>Academy</h3>
-            <p>Deep-dive into secure coding lessons</p>
-          </div>
-        </Card>
-      </a>
+        </div>
+      </div>
     </div>
   </div>
 {/if}
 
 <style>
-  .dashboard {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
+  /* Page shell */
+  .page {
+    padding: var(--space-7) 0 var(--space-8);
+  }
+
+  .page-head {
+    margin-bottom: var(--space-6);
+  }
+
+  .page-head h1 {
+    font-family: var(--font-serif);
+    font-size: var(--fs-h1);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin-top: var(--space-1);
+    color: var(--text-primary);
   }
 
   /* Loading & Error */
@@ -185,7 +177,7 @@
   .loading-pulse {
     width: 40px;
     height: 40px;
-    border: 2px solid var(--accent-green);
+    border: 2px solid var(--accent-primary);
     border-radius: 50%;
     animation: pulse 1.2s ease-in-out infinite;
   }
@@ -196,7 +188,9 @@
   }
 
   .loading-text {
-    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    text-transform: uppercase;
     color: var(--text-tertiary);
     letter-spacing: 0.15em;
   }
@@ -206,98 +200,78 @@
     align-items: center;
     justify-content: center;
     min-height: 30vh;
-    color: var(--accent-red, #ff4444);
-    font-size: 0.85rem;
+    color: var(--accent-red);
+    font-size: var(--fs-micro);
   }
 
-  /* Header */
-  .dash-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-  }
-
-  .dash-title {
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-
-  .accent {
-    color: var(--accent-green);
-  }
-
-  .dash-subtitle {
-    font-size: 0.875rem;
-    color: var(--text-tertiary);
-    margin-top: var(--space-1);
-  }
-
-  /* Section headers */
-  .section-header {
-    font-family: var(--font-serif);
-    font-size: 0.9375rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin-bottom: var(--space-4);
-  }
-
-  /* Top row */
-  .top-row {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: var(--space-4);
-    align-items: stretch;
-  }
-
-  .stats-grid {
+  /* Career ledger */
+  .ledger {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: var(--space-4);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    margin-bottom: var(--space-6);
   }
 
-  .stat {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    padding: var(--space-2);
+  .ledger-cell {
+    padding: var(--space-4) var(--space-5);
+    border-right: 1px solid var(--border-primary);
   }
 
-  .stat-value {
-    font-size: 1.75rem;
-    font-weight: 700;
+  .ledger-cell:last-child {
+    border-right: 0;
   }
 
-  .stat-unit {
-    font-size: 1rem;
-    opacity: 0.6;
-  }
-
-  .stat-label {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
-  }
-
-  .stat-sub {
-    font-size: 0.7rem;
+  .ledger-cell .lab {
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
     color: var(--text-tertiary);
   }
 
-  /* Middle row */
-  .mid-row {
+  .ledger-cell .fig {
+    font-family: var(--font-serif);
+    font-size: 1.9rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums oldstyle-nums;
+    margin-top: var(--space-2);
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+  }
+
+  .ledger-cell .fig small {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-tertiary);
+    font-weight: 400;
+    margin-left: 0.2em;
+  }
+
+  /* Dashboard grid */
+  .dash-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: var(--space-4);
+    grid-template-columns: 1.3fr 1fr;
+    gap: var(--space-6);
     align-items: start;
   }
 
-  /* Jump back in */
-  .jump-section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
+  .dash-col {
+    display: grid;
+    gap: var(--space-6);
   }
 
+  .card {
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-card);
+    background: var(--bg-surface);
+    padding: var(--space-5);
+  }
+
+  /* Jump back in */
   .jump-card {
+    display: block;
     text-decoration: none;
     color: inherit;
   }
@@ -309,13 +283,6 @@
     gap: var(--space-4);
   }
 
-  .jump-left {
-    display: flex;
-    align-items: center;
-    gap: var(--space-4);
-    min-width: 0;
-  }
-
   .jump-info {
     display: flex;
     flex-direction: column;
@@ -323,9 +290,10 @@
     min-width: 0;
   }
 
-  .jump-info h3 {
+  .jump-title {
     font-family: var(--font-serif);
-    font-size: 0.95rem;
+    font-size: var(--fs-lead);
+    font-weight: 600;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -336,7 +304,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
     color: var(--text-tertiary);
   }
 
@@ -346,71 +315,81 @@
   }
 
   .jump-pts {
-    color: var(--accent-green);
+    color: var(--accent-primary);
+    font-variant-numeric: tabular-nums;
   }
 
   /* All done */
   .all-done {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
     padding: var(--space-2);
-    font-size: 0.85rem;
+    font-size: var(--fs-micro);
     color: var(--text-secondary);
   }
 
   /* Quick links */
   .quick-links {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    gap: var(--space-4);
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-5);
   }
 
   .action-card {
-    text-decoration: none;
-    color: inherit;
-  }
-
-  .action-content {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
+    text-decoration: none;
+    color: inherit;
+    padding: var(--space-4);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-input);
+    background: var(--bg-surface);
+    transition: border-color 0.15s ease;
   }
 
-  .action-content h3 {
+  .action-card:hover {
+    border-color: var(--accent-primary);
+  }
+
+  .action-card h3 {
     font-family: var(--font-serif);
-    font-size: 0.9rem;
+    font-size: var(--fs-h4);
+    font-weight: 600;
     color: var(--text-primary);
   }
 
-  .action-content p {
-    font-size: 0.8rem;
+  .action-card p {
+    font-size: var(--fs-micro);
     color: var(--text-secondary);
   }
 
   /* Responsive */
-  @media (max-width: 900px) {
-    .top-row {
-      grid-template-columns: 1fr;
-    }
-
-    .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
-    .mid-row {
+  @media (max-width: 980px) {
+    .dash-grid {
       grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 600px) {
-    .stats-grid {
+    .ledger {
       grid-template-columns: 1fr 1fr;
+    }
+
+    .ledger-cell:nth-child(2) {
+      border-right: 0;
+    }
+
+    .ledger-cell:nth-child(1),
+    .ledger-cell:nth-child(2) {
+      border-bottom: 1px solid var(--border-primary);
     }
 
     .jump-content {
       flex-direction: column;
       align-items: flex-start;
+    }
+
+    .quick-links {
+      grid-template-columns: 1fr;
     }
   }
 </style>

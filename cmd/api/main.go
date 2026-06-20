@@ -127,6 +127,7 @@ func main() {
 	// Router
 	router := server.NewRouter(server.RouterDeps{
 		Logger:             logger,
+		PgPool:             pool,
 		RedisClient:        redisClient,
 		AuthService:        authService,
 		APIKeyService:      apiKeyService,

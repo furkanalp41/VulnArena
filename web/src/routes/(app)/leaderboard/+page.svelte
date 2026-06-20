@@ -36,12 +36,10 @@
     }
   }
 
-  const podiumColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
-
   function getPodiumClass(rank: number): string {
-    if (rank === 1) return 'gold';
-    if (rank === 2) return 'silver';
-    if (rank === 3) return 'bronze';
+    if (rank === 1) return 'p1';
+    if (rank === 2) return 'p2';
+    if (rank === 3) return 'p3';
     return '';
   }
 </script>
@@ -60,22 +58,28 @@
     <span>{error}</span>
   </div>
 {:else}
-  <div class="leaderboard">
-    <header class="lb-header">
+  <div class="shell page leaderboard">
+    <div class="page-head">
+      <span class="eyebrow">Standings</span>
       <h1 class="lb-title">Leaderboard</h1>
-      <div class="tab-bar">
-        <button
-          class="tab-btn"
-          class:active={activeTab === 'hackers'}
-          onclick={() => switchTab('hackers')}
-        >Global hackers</button>
-        <button
-          class="tab-btn"
-          class:active={activeTab === 'squads'}
-          onclick={() => switchTab('squads')}
-        >Top squads</button>
-      </div>
-    </header>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button
+        class="tab"
+        class:is-on={activeTab === 'hackers'}
+        role="tab"
+        aria-selected={activeTab === 'hackers'}
+        onclick={() => switchTab('hackers')}
+      >Global</button>
+      <button
+        class="tab"
+        class:is-on={activeTab === 'squads'}
+        role="tab"
+        aria-selected={activeTab === 'squads'}
+        onclick={() => switchTab('squads')}
+      >Squads</button>
+    </div>
 
     {#if activeTab === 'squads'}
       {#if squadLoading}
@@ -90,39 +94,52 @@
           </div>
         </Card>
       {:else}
-        <div class="lb-table">
-          <div class="lb-row squad-header-row">
-            <span class="col-rank">#</span>
-            <span class="col-user">Squad</span>
-            <span class="col-tier">Members</span>
-            <span class="col-xp">XP</span>
-            <span class="col-solved">Solved</span>
-          </div>
-          {#each squadEntries as entry (entry.rank)}
+        <div class="podium">
+          {#each squadEntries.slice(0, 3) as entry (entry.rank)}
             {@const podium = getPodiumClass(entry.rank)}
-            <a href="/teams/{entry.tag}" class="lb-row lb-data-row {podium ? 'podium ' + podium : ''}">
-              <span class="col-rank">
-                {#if entry.rank <= 3}
-                  <span class="rank-medal" style:color={podiumColors[entry.rank - 1]}>{entry.rank}</span>
-                {:else}
-                  <span class="rank-num">{entry.rank}</span>
-                {/if}
-              </span>
-              <span class="col-user">
-                <span class="squad-tag">{entry.tag}</span>
-                <span class="user-name">{entry.team_name}</span>
-              </span>
-              <span class="col-tier">{entry.member_count}</span>
-              <span class="col-xp">
-                <span class="xp-value">{entry.total_xp.toLocaleString()}</span>
-                <span class="xp-label">XP</span>
-              </span>
-              <span class="col-solved">
-                <span class="solved-value">{entry.total_solved}</span>
-              </span>
+            <a
+              href="/teams/{entry.tag}"
+              class="podium-card {podium}"
+            >
+              <div class="podium-rank osf">{entry.rank}</div>
+              <div class="podium-name">{entry.team_name}</div>
+              <div class="podium-meta">
+                <span class="tier">{entry.tag}</span> · {entry.total_xp.toLocaleString()} XP · {entry.total_solved} solved
+              </div>
             </a>
           {/each}
         </div>
+
+        <table class="standings">
+          <thead>
+            <tr>
+              <th class="num">Rank</th>
+              <th>Squad</th>
+              <th class="hide-sm">Members</th>
+              <th class="num">XP</th>
+              <th class="num">Solved</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each squadEntries as entry (entry.rank)}
+              {@const podium = getPodiumClass(entry.rank)}
+              <tr
+                class="lb-row {podium ? 'podium ' + podium : ''}"
+                onclick={() => (window.location.href = `/teams/${entry.tag}`)}
+              >
+                <td class="num rk">{entry.rank}</td>
+                <td class="op">
+                  <a class="row-link" href="/teams/{entry.tag}">
+                    {entry.team_name} <span class="squad-tag">{entry.tag}</span>
+                  </a>
+                </td>
+                <td class="hide-sm tier tnum">{entry.member_count}</td>
+                <td class="num xp">{entry.total_xp.toLocaleString()}</td>
+                <td class="num solved">{entry.total_solved}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       {/if}
     {:else if entries.length === 0}
       <Card variant="bordered">
@@ -131,68 +148,67 @@
         </div>
       </Card>
     {:else}
-      <div class="lb-table">
-        <div class="lb-row lb-header-row">
-          <span class="col-rank">#</span>
-          <span class="col-user">Player</span>
-          <span class="col-tier">Tier</span>
-          <span class="col-xp">XP</span>
-          <span class="col-solved">Solved</span>
-        </div>
-
-        {#each entries as entry (entry.rank)}
+      <div class="podium">
+        {#each entries.slice(0, 3) as entry (entry.rank)}
           {@const podium = getPodiumClass(entry.rank)}
           {@const tierColor = getTierColor(entry.rank_title)}
-          <a href="/profile/{entry.username}" class="lb-row lb-data-row {podium ? 'podium ' + podium : ''}">
-            <span class="col-rank">
-              {#if entry.rank <= 3}
-                <span class="rank-medal" style:color={podiumColors[entry.rank - 1]}>
-                  {entry.rank}
-                </span>
-              {:else}
-                <span class="rank-num">{entry.rank}</span>
-              {/if}
-            </span>
-
-            <span class="col-user">
-              <span class="user-avatar" style:border-color={tierColor}>
-                {entry.username.charAt(0).toUpperCase()}
-              </span>
-              <span class="user-info">
-                <span class="user-name">{entry.username}</span>
-                {#if entry.display_name}
-                  <span class="user-display">{entry.display_name}</span>
-                {/if}
-              </span>
-            </span>
-
-            <span class="col-tier">
-              <span class="tier-badge" style:color={tierColor} style:border-color={tierColor}>
-                T{entry.tier}
-              </span>
-              <span class="tier-title" style:color={tierColor}>{entry.rank_title}</span>
-            </span>
-
-            <span class="col-xp">
-              <span class="xp-value">{entry.total_xp.toLocaleString()}</span>
-              <span class="xp-label">XP</span>
-            </span>
-
-            <span class="col-solved">
-              <span class="solved-value">{entry.total_solved}</span>
-            </span>
+          <a
+            href="/profile/{entry.username}"
+            class="podium-card {podium}"
+          >
+            <div class="podium-rank osf">{entry.rank}</div>
+            <div class="podium-name">{entry.username}</div>
+            <div class="podium-meta">
+              <span class="tier" style:color={tierColor}>T{entry.tier}</span> · {entry.total_xp.toLocaleString()} XP · {entry.total_solved} solved
+            </div>
           </a>
         {/each}
       </div>
+
+      <table class="standings">
+        <thead>
+          <tr>
+            <th class="num">Rank</th>
+            <th>Operator</th>
+            <th class="hide-sm">Tier</th>
+            <th class="num">XP</th>
+            <th class="num">Solved</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each entries as entry (entry.rank)}
+            {@const podium = getPodiumClass(entry.rank)}
+            {@const tierColor = getTierColor(entry.rank_title)}
+            <tr
+              class="lb-row {podium ? 'podium ' + podium : ''}"
+              onclick={() => (window.location.href = `/profile/${entry.username}`)}
+            >
+              <td class="num rk">{entry.rank}</td>
+              <td class="op">
+                <a class="row-link" href="/profile/{entry.username}">
+                  {entry.username}
+                  {#if entry.display_name}
+                    <span class="op-display">{entry.display_name}</span>
+                  {/if}
+                </a>
+              </td>
+              <td class="hide-sm tier">
+                <span style:color={tierColor}>T{entry.tier}</span>
+                <span class="tier-title">{entry.rank_title}</span>
+              </td>
+              <td class="num xp">{entry.total_xp.toLocaleString()}</td>
+              <td class="num solved">{entry.total_solved}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {/if}
   </div>
 {/if}
 
 <style>
   .leaderboard {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-6);
+    padding: var(--space-7) 0 var(--space-8);
   }
 
   /* Loading & Error */
@@ -208,7 +224,7 @@
   .loading-pulse {
     width: 40px;
     height: 40px;
-    border: 2px solid var(--border-secondary);
+    border: 1px solid var(--border-secondary);
     border-radius: 50%;
     animation: pulse 1.2s ease-in-out infinite;
   }
@@ -219,8 +235,9 @@
   }
 
   .loading-text {
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    letter-spacing: 0.04em;
     color: var(--text-tertiary);
   }
 
@@ -230,75 +247,53 @@
     justify-content: center;
     min-height: 30vh;
     color: var(--accent-red);
-    font-size: 0.85rem;
+    font-size: var(--fs-body);
   }
 
   /* Header */
-  .lb-header {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
+  .page-head {
+    margin-bottom: var(--space-6);
   }
 
   .lb-title {
     font-family: var(--font-serif);
-    font-size: 1.5rem;
+    font-size: var(--fs-h1);
     font-weight: 700;
+    letter-spacing: -0.015em;
     color: var(--text-primary);
+    margin-top: var(--space-1);
   }
 
-  .tab-bar {
+  /* Tabs — mono small-caps underline */
+  .tabs {
     display: flex;
-    gap: 0;
-    margin-top: var(--space-3);
-  }
-
-  .tab-btn {
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    padding: var(--space-2) var(--space-4);
-    background: transparent;
-    border: 1px solid var(--border-primary);
-    color: var(--text-tertiary);
-    cursor: pointer;
-    transition: all var(--transition-fast);
-  }
-
-  .tab-btn:first-child {
-    border-radius: var(--radius-sm) 0 0 var(--radius-sm);
-    border-right: none;
-  }
-
-  .tab-btn:last-child {
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  }
-
-  .tab-btn.active {
-    background: var(--accent-primary);
-    border-color: var(--accent-primary);
-    color: var(--text-inverse);
-  }
-
-  .tab-btn:not(.active):hover {
-    border-color: var(--text-secondary);
-    color: var(--text-secondary);
-  }
-
-  .squad-tag {
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    color: var(--text-secondary);
-    font-weight: 700;
-    margin-right: var(--space-2);
-  }
-
-  .squad-header-row {
-    height: 44px;
-    font-family: var(--font-sans);
-    font-size: 0.6875rem;
-    color: var(--text-tertiary);
+    gap: var(--space-4);
     border-bottom: 1px solid var(--border-primary);
-    background: var(--bg-tertiary, var(--bg-secondary));
+    margin-bottom: var(--space-6);
+  }
+
+  .tab {
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    padding: 0 0 var(--space-3);
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .tab.is-on {
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .tab:not(.is-on):hover {
+    color: var(--text-secondary);
   }
 
   /* Empty state */
@@ -307,230 +302,187 @@
     align-items: center;
     gap: var(--space-3);
     padding: var(--space-4);
-    font-size: 0.85rem;
+    font-size: var(--fs-body);
     color: var(--text-secondary);
   }
 
+  /* Podium — cards with 3px earthy left-rule accent */
+  .podium {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-4);
+    margin-bottom: var(--space-7);
+  }
 
-  /* Table */
-  .lb-table {
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-secondary);
+  .podium-card {
     border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
+    border-left-width: 3px;
+    border-radius: var(--radius-card);
+    padding: var(--space-4) var(--space-5);
+    background: var(--bg-surface);
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s ease;
+  }
+
+  .podium-card:hover {
+    border-color: var(--border-secondary);
+  }
+
+  .podium-card.p1 { border-left-color: var(--accent-primary); }
+  .podium-card.p2 { border-left-color: var(--accent-blue); }
+  .podium-card.p3 { border-left-color: var(--accent-purple); }
+
+  .podium-rank {
+    font-family: var(--font-serif);
+    font-size: 2.25rem;
+    line-height: 1;
+    color: var(--text-tertiary);
+    font-variant-numeric: oldstyle-nums;
+    float: right;
+    margin-left: var(--space-3);
+  }
+
+  .podium-card.p1 .podium-rank { color: var(--accent-primary); }
+  .podium-card.p2 .podium-rank { color: var(--accent-blue); }
+  .podium-card.p3 .podium-rank { color: var(--accent-purple); }
+
+  .podium-name {
+    font-family: var(--font-serif);
+    font-size: var(--fs-h4);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .podium-meta {
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
+    margin-top: var(--space-1);
+  }
+
+  .podium-meta .tier {
+    color: var(--text-tertiary);
+  }
+
+  /* Standings table */
+  .standings {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .standings thead th {
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    text-align: left;
+    padding: 0 var(--space-4) var(--space-3);
+    border-bottom: 1px solid var(--border-secondary);
+  }
+
+  .standings th.num,
+  .standings td.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-family: var(--font-mono);
+  }
+
+  .standings tbody td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--border-primary);
+    vertical-align: baseline;
   }
 
   .lb-row {
-    display: grid;
-    grid-template-columns: 60px 1fr 160px 100px 80px;
-    align-items: center;
-    padding: 0 var(--space-4);
-    text-decoration: none;
-    color: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease;
   }
 
-  .lb-header-row {
-    height: 44px;
-    font-family: var(--font-sans);
-    font-size: 0.6875rem;
-    color: var(--text-tertiary);
-    border-bottom: 1px solid var(--border-primary);
-    background: var(--bg-tertiary, var(--bg-secondary));
-  }
-
-  .lb-data-row {
-    height: 64px;
-    border-bottom: 1px solid var(--border-primary);
-    transition: background var(--transition-fast);
-  }
-
-  .lb-data-row:last-child {
-    border-bottom: none;
-  }
-
-  .lb-data-row:hover {
+  .standings tbody tr:hover td {
     background: var(--bg-hover);
   }
 
-  /* Podium rows */
-  .lb-data-row.podium {
-    position: relative;
+  /* Podium-rank rows carry the same earthy left accent */
+  .lb-row.podium td:first-child {
+    box-shadow: inset 3px 0 0 var(--accent-primary);
+  }
+  .lb-row.p2 td:first-child {
+    box-shadow: inset 3px 0 0 var(--accent-blue);
+  }
+  .lb-row.p3 td:first-child {
+    box-shadow: inset 3px 0 0 var(--accent-purple);
   }
 
-  .lb-data-row.gold {
-    border-left: 3px solid #ffd700;
-    background: rgba(255, 215, 0, 0.03);
-  }
-
-  .lb-data-row.gold:hover {
-    background: rgba(255, 215, 0, 0.06);
-  }
-
-  .lb-data-row.silver {
-    border-left: 3px solid #c0c0c0;
-    background: rgba(192, 192, 192, 0.02);
-  }
-
-  .lb-data-row.silver:hover {
-    background: rgba(192, 192, 192, 0.05);
-  }
-
-  .lb-data-row.bronze {
-    border-left: 3px solid #cd7f32;
-    background: rgba(205, 127, 50, 0.02);
-  }
-
-  .lb-data-row.bronze:hover {
-    background: rgba(205, 127, 50, 0.05);
-  }
-
-  /* Columns */
-  .col-rank {
-    text-align: center;
-  }
-
-  .rank-medal {
-    font-size: 1.1rem;
-    font-weight: 800;
-  }
-
-  .rank-num {
-    font-size: 0.85rem;
+  .standings .rk {
+    font-family: var(--font-mono);
     color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+    width: 3rem;
   }
 
-  .col-user {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    min-width: 0;
+  .standings .op {
+    font-family: var(--font-serif);
+    font-size: 1.05rem;
+    font-weight: 500;
   }
 
-  .user-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: 2px solid;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.8rem;
-    font-weight: 700;
+  .row-link {
     color: var(--text-primary);
-    background: var(--bg-primary);
-    flex-shrink: 0;
-  }
-
-  .user-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-  }
-
-  .user-name {
-    font-family: var(--font-sans);
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .user-display {
-    font-size: 0.7rem;
-    color: var(--text-tertiary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .col-tier {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .tier-badge {
-    font-family: var(--font-sans);
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 2px 6px;
-    border: 1px solid;
-    border-radius: var(--radius-sm);
-    flex-shrink: 0;
-  }
-
-  .tier-title {
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    white-space: nowrap;
-  }
-
-  .col-xp {
-    display: flex;
+    text-decoration: none;
+    display: inline-flex;
     align-items: baseline;
-    gap: 4px;
+    gap: 0.5em;
   }
 
-  .xp-value {
-    font-size: 0.9rem;
-    font-weight: 700;
-    color: var(--text-primary);
+  .row-link:hover {
+    color: var(--accent-primary);
   }
 
-  .xp-label {
-    font-family: var(--font-sans);
-    font-size: 0.6rem;
+  .squad-tag {
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    letter-spacing: 0.06em;
     color: var(--text-tertiary);
   }
 
-  .col-solved {
-    text-align: center;
+  .op-display {
+    font-family: var(--font-mono);
+    font-size: var(--fs-eyebrow);
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
   }
 
-  .solved-value {
-    font-size: 0.85rem;
-    font-weight: 600;
+  .standings .tier {
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
     color: var(--text-secondary);
   }
 
-  /* Responsive */
-  @media (max-width: 768px) {
-    .lb-row {
-      grid-template-columns: 40px 1fr 80px 70px;
-      padding: 0 var(--space-2);
-    }
-
-    .col-solved {
-      display: none;
-    }
-
-    .tier-title {
-      display: none;
-    }
-
-    .lb-data-row {
-      height: 56px;
-    }
+  .tier-title {
+    color: var(--text-tertiary);
+    margin-left: 0.5em;
   }
 
-  @media (max-width: 480px) {
-    .lb-row {
-      grid-template-columns: 32px 1fr 60px;
+  .standings .xp { color: var(--text-primary); }
+  .standings .solved { color: var(--text-secondary); }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .podium {
+      grid-template-columns: 1fr;
     }
 
-    .col-xp {
+    .standings .hide-sm,
+    .tier-title {
       display: none;
-    }
-
-    .user-avatar {
-      width: 28px;
-      height: 28px;
-      font-size: 0.65rem;
     }
   }
 </style>

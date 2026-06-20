@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import type { RemoteCursor, RemoteSelection } from '$lib/stores/collab';
+  import { theme } from '$lib/stores/theme';
 
   interface Props {
     code: string;
@@ -47,6 +48,7 @@
     assembly: 'plaintext',
     perl: 'perl',
     cobol: 'plaintext',
+    fortran: 'plaintext',
     flutter: 'dart',
     python: 'python',
     ruby: 'ruby',
@@ -88,6 +90,46 @@
         'scrollbarSlider.activeBackground': '#444444a0',
         'editorOverviewRuler.border': '#1e1e1e',
         'minimap.background': '#1a1a1a',
+      },
+    });
+
+    // Light variant — Monaco themes are registered imperatively in JS (they
+    // cannot read CSS custom properties), so the warm light palette is mirrored
+    // here key-for-key and swapped reactively on theme change.
+    m.editor.defineTheme('vulnarena-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '9c9690', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '6b7fa3' },
+        { token: 'string', foreground: '6b8f5b' },
+        { token: 'number', foreground: 'b8845a' },
+        { token: 'type', foreground: '8b6fa8' },
+        { token: 'function', foreground: '2c2723' },
+        { token: 'variable', foreground: '3a342e' },
+        { token: 'operator', foreground: '6b6560' },
+        { token: 'delimiter', foreground: '9c9690' },
+        { token: 'identifier', foreground: '2c2723' },
+      ],
+      colors: {
+        'editor.background': '#faf8f5',
+        'editor.foreground': '#1a1a1a',
+        'editor.lineHighlightBackground': '#00000008',
+        'editor.selectionBackground': '#e3ddd4',
+        'editor.inactiveSelectionBackground': '#e8e3de80',
+        'editorLineNumber.foreground': '#c2bab0',
+        'editorLineNumber.activeForeground': '#b8845a',
+        'editorCursor.foreground': '#b8845a',
+        'editor.selectionHighlightBackground': '#b8845a18',
+        'editorIndentGuide.background': '#e8e3de',
+        'editorIndentGuide.activeBackground': '#cdc6be',
+        'editorGutter.background': '#f2eeea',
+        'scrollbar.shadow': '#00000000',
+        'scrollbarSlider.background': '#c9c1b650',
+        'scrollbarSlider.hoverBackground': '#c9c1b680',
+        'scrollbarSlider.activeBackground': '#c9c1b6a0',
+        'editorOverviewRuler.border': '#faf8f5',
+        'minimap.background': '#f2eeea',
       },
     });
   }
@@ -192,7 +234,7 @@
     editor = monaco.editor.create(container, {
       value: code,
       language: languageMap[language] || 'plaintext',
-      theme: 'vulnarena-dark',
+      theme: $theme === 'light' ? 'vulnarena-light' : 'vulnarena-dark',
       readOnly: readonly,
       minimap: { enabled: true, scale: 1, showSlider: 'mouseover' },
       fontSize: 13.5,
@@ -273,6 +315,15 @@
     }
   });
 
+  // Swap the Monaco theme when the app theme changes so the code surface
+  // follows light/dark. setTheme is the only reactive lever Monaco exposes.
+  $effect(() => {
+    const t = $theme;
+    if (editor && monaco) {
+      monaco.editor.setTheme(t === 'light' ? 'vulnarena-light' : 'vulnarena-dark');
+    }
+  });
+
   // Update decorations when selectedLines changes
   $effect(() => {
     if (selectedLines) {
@@ -314,12 +365,12 @@
   }
 
   :global(.vuln-line-highlight) {
-    background: rgba(201, 114, 107, 0.12) !important;
-    border-left: 3px solid #c9726b !important;
+    background: color-mix(in srgb, var(--accent-red) 12%, transparent) !important;
+    border-left: 3px solid var(--accent-red) !important;
   }
 
   :global(.vuln-glyph-margin) {
-    background: #c9726b;
+    background: var(--accent-red);
     border-radius: 50%;
     width: 8px !important;
     height: 8px !important;
@@ -356,7 +407,7 @@
 
   /* Remote selection highlight */
   :global(.remote-selection-highlight) {
-    background: rgba(59, 130, 246, 0.08) !important;
-    border-left: 2px solid rgba(59, 130, 246, 0.5) !important;
+    background: color-mix(in srgb, var(--accent-blue) 12%, transparent) !important;
+    border-left: 2px solid var(--accent-blue) !important;
   }
 </style>

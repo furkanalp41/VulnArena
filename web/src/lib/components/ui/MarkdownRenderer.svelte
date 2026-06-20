@@ -65,79 +65,89 @@
 </div>
 
 <style>
+  /* Editorial / print-classic prose — serif headings, mono small-caps
+     section labels, hairline rules, a ~66ch measure, sand-ink accent. */
   .markdown-body {
     font-family: var(--font-sans);
-    color: var(--text-primary);
-    line-height: 1.75;
-    font-size: 0.9375rem;
+    color: var(--text-secondary);
+    line-height: 1.7;
+    font-size: var(--fs-body);
+    max-width: var(--measure);
   }
 
-  /* Headings */
+  /* H1/H2 — serif display over a hairline */
   .markdown-body :global(.md-heading-major) {
     font-family: var(--font-serif);
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.15;
     color: var(--text-primary);
-    margin-top: 2.5rem;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
+    margin: var(--space-8) 0 var(--space-4);
+    padding-bottom: var(--space-2);
     border-bottom: 1px solid var(--border-primary);
   }
 
   .markdown-body :global(h1.md-heading-major) {
-    font-size: 1.625rem;
-    color: var(--text-primary);
-    border-bottom-color: var(--border-secondary);
+    font-size: var(--fs-h1);
+    letter-spacing: -0.02em;
+    margin-top: var(--space-3);
   }
 
   .markdown-body :global(h2.md-heading-major) {
-    font-size: 1.25rem;
+    font-size: var(--fs-h2);
   }
 
+  /* H3/H4 — mono small-caps section labels over a hairline */
   .markdown-body :global(.md-heading-minor) {
-    font-family: var(--font-serif);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-top: 1.75rem;
-    margin-bottom: 0.75rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--text-tertiary);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--border-primary);
+    margin: var(--space-6) 0 var(--space-4);
   }
 
   .markdown-body :global(h3.md-heading-minor) {
-    font-size: 1.0625rem;
+    font-size: var(--fs-label);
   }
 
   .markdown-body :global(h4.md-heading-minor) {
-    font-size: 0.9375rem;
-    color: var(--text-secondary);
+    font-size: var(--fs-eyebrow);
+    color: var(--text-tertiary);
   }
 
-  /* Paragraphs */
+  /* Paragraphs — generous rhythm on the reading measure */
   .markdown-body :global(p) {
-    margin-bottom: 1rem;
+    margin: var(--space-4) 0;
     color: var(--text-secondary);
+    line-height: 1.7;
   }
 
-  /* Callout / blockquote */
+  /* Callout / blockquote — hairline rule, no fill, sand accent edge */
   .markdown-body :global(.md-callout) {
-    border-left: 3px solid var(--accent-yellow);
-    background: var(--bg-tertiary);
-    padding: 1rem 1.25rem;
-    margin: 1.5rem 0;
-    border-radius: 0 var(--radius-md) var(--radius-md) 0;
-    font-size: 0.875rem;
+    border-left: 2px solid var(--accent-primary);
+    padding: var(--space-1) 0 var(--space-1) var(--space-4);
+    margin: var(--space-5) 0;
+    color: var(--text-secondary);
+    font-size: var(--fs-body);
   }
 
   .markdown-body :global(.md-callout p) {
-    margin-bottom: 0;
+    margin: var(--space-2) 0;
     color: var(--text-primary);
-    font-weight: 500;
   }
 
-  /* Code blocks */
+  .markdown-body :global(.md-callout strong) {
+    color: var(--accent-primary);
+  }
+
+  /* Code blocks — editor surface, hairline border, no shadow */
   .markdown-body :global(.md-code-block) {
-    margin: 1.25rem 0;
+    margin: var(--space-4) 0;
     border: 1px solid var(--border-primary);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-input);
     overflow: hidden;
     background: var(--editor-bg);
   }
@@ -146,85 +156,88 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0.375rem 1rem;
-    background: var(--bg-secondary);
+    padding: var(--space-2) var(--space-4);
     border-bottom: 1px solid var(--border-primary);
   }
 
   .markdown-body :global(.md-code-lang) {
     font-family: var(--font-mono);
-    font-size: 0.6875rem;
+    font-size: var(--fs-eyebrow);
     color: var(--text-tertiary);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.1em;
   }
 
   .markdown-body :global(.md-pre) {
     margin: 0;
-    padding: 1rem;
+    padding: var(--space-4);
     overflow-x: auto;
   }
 
   .markdown-body :global(.md-pre code) {
     font-family: var(--font-mono);
-    font-size: 0.8125rem;
+    font-size: var(--fs-micro);
     line-height: 1.6;
     color: var(--text-primary);
     background: none;
     padding: 0;
   }
 
-  /* Inline code */
+  /* Inline code — quiet mono on the editor surface, hairline border */
   .markdown-body :global(.md-inline-code) {
     font-family: var(--font-mono);
-    font-size: 0.8125rem;
-    background: var(--bg-tertiary);
-    color: var(--accent-green);
-    padding: 0.125rem 0.375rem;
-    border-radius: var(--radius-sm);
+    font-size: 0.875em;
+    background: var(--editor-bg);
+    color: var(--text-primary);
+    padding: 0.1em 0.35em;
+    border-radius: var(--radius-input);
     border: 1px solid var(--border-primary);
   }
 
-  /* Divider */
+  /* Honest status hues for inline status spans, if authored */
+  .markdown-body :global(.md-inline-code.status-success) {
+    color: var(--diff-1);
+  }
+
+  .markdown-body :global(.md-inline-code.status-error) {
+    color: var(--accent-red);
+  }
+
+  /* Divider — hairline rule */
   .markdown-body :global(.md-divider) {
     border: none;
     border-top: 1px solid var(--border-primary);
-    margin: 2rem 0;
+    margin: var(--space-8) 0;
   }
 
   /* Lists */
   .markdown-body :global(.md-list) {
-    margin: 0.75rem 0;
-    padding-left: 1.5rem;
+    margin: var(--space-4) 0;
+    padding-left: var(--space-6);
   }
 
   .markdown-body :global(.md-list li) {
-    margin-bottom: 0.375rem;
+    margin-bottom: var(--space-2);
     color: var(--text-secondary);
-    font-size: 0.9375rem;
+    font-size: var(--fs-body);
+    line-height: 1.7;
   }
 
-  /* Bold */
+  /* Bold — promote to primary ink */
   .markdown-body :global(.md-bold) {
     color: var(--text-primary);
     font-weight: 600;
   }
 
-  /* Links */
+  /* Links — sand ink with a faint underline that deepens on hover */
   .markdown-body :global(.md-link) {
-    color: var(--accent-blue);
+    color: var(--accent-primary);
     text-decoration: none;
-    border-bottom: 1px dashed var(--accent-blue-dim);
-    transition: all var(--transition-fast);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent-primary) 40%, transparent);
+    transition: border-color var(--transition-fast);
   }
 
   .markdown-body :global(.md-link:hover) {
-    color: var(--accent-blue-dim);
-    border-bottom-style: solid;
-  }
-
-  /* Strong emphasis in first child (for the classification header) */
-  .markdown-body :global(.md-callout strong) {
-    color: var(--accent-yellow);
+    border-bottom-color: var(--accent-primary);
   }
 </style>

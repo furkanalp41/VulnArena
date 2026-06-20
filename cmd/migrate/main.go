@@ -18,7 +18,7 @@ func main() {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://vulnarena:vulnarena_secret@localhost:5432/vulnarena?sslmode=disable"
+		log.Fatal("DATABASE_URL is required")
 	}
 
 	m, err := migrate.New("file://migrations", dbURL)

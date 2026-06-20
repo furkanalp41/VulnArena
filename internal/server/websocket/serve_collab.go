@@ -33,21 +33,18 @@ func ServeCollabWS(hub *Hub, authService *service.AuthService, teamService *serv
 		// Get user's team membership for room validation
 		team, _ := teamService.GetUserTeam(r.Context(), userID)
 
-		// We need user info — fetch from the team service or embed in claims.
-		// For now, use the claims UserID and look up via a lightweight approach.
-		// The username is embedded when the client sends JOIN_ROOM.
-		// We'll set a placeholder and let the client provide display info.
-		// Actually, let's look up the user properly.
-		username = claims.UserID.String() // fallback
+		// Identity is anchored to the authenticated subject. The JWT Claims
+		// currently carry only UserID/Role (no username/display_name), and no
+		// user-lookup method is exposed to this handler, so we fall back to the
+		// authenticated UserID for display rather than trusting client input.
+		//
+		// TODO(security): derive identity + enforce room membership server-side —
+		// fetch the canonical username/display_name for claims.UserID (e.g. add a
+		// UserService.GetByID) instead of accepting username/display_name from
+		// query params, which let an authenticated user spoof another's display
+		// identity. Also enforce team membership in ValidateRoomAccess on JOIN_ROOM.
+		username = claims.UserID.String()
 		displayName = username
-
-		// Try to get username from the request (optional query params for display)
-		if u := r.URL.Query().Get("username"); u != "" {
-			username = u
-		}
-		if d := r.URL.Query().Get("display_name"); d != "" {
-			displayName = d
-		}
 
 		up := newUpgrader(hub.allowedOrigins)
 		conn, err := up.Upgrade(w, r, nil)

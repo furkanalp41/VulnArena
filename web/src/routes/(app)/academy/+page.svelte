@@ -23,62 +23,53 @@
 </script>
 
 <div class="academy">
-  <header class="academy-header">
-    <div>
-      <h1 class="academy-title">The Academy</h1>
-      <p class="academy-subtitle">Deep-dive technical breakdowns of how vulnerabilities manifest at the function level.</p>
-    </div>
-    {#if total > 0}
-      <span class="lesson-count">{total} lesson{total !== 1 ? 's' : ''} available</span>
-    {/if}
+  <header class="masthead">
+    <span class="eyebrow">VulnArena · Academy</span>
+    <h1 class="masthead-title">The Academy</h1>
+    <p class="masthead-lede">Deep-dive technical breakdowns of how vulnerabilities manifest at the function level.</p>
   </header>
 
+  <div class="section-header">
+    <h2>Lessons</h2>
+    {#if total > 0}
+      <span class="smallcaps tnum">{total} {total !== 1 ? 'entries' : 'entry'}</span>
+    {/if}
+  </div>
+
   {#if loading}
-    <Card variant="bordered" padding="lg">
-      <div class="state-msg">
-        <span class="state-text">Loading lessons...</span>
-      </div>
-    </Card>
+    <div class="state-msg">
+      <span class="rule-s"></span>
+      <span class="state-text">Loading lessons…</span>
+    </div>
   {:else if error}
-    <Card variant="bordered" padding="lg">
-      <div class="state-msg">
-        <span class="error-icon">!</span>
-        <p class="error-text">{error}</p>
-      </div>
-    </Card>
+    <div class="state-msg">
+      <span class="rule-s"></span>
+      <p class="error-text">{error}</p>
+    </div>
   {:else if lessons.length === 0}
-    <Card variant="bordered" padding="lg">
-      <div class="state-msg">
-        <span class="state-text">No lessons found</span>
-        <p class="state-sub">Run <code>make seed</code> to populate the academy.</p>
-      </div>
-    </Card>
+    <div class="state-msg">
+      <span class="rule-s"></span>
+      <span class="state-text">No lessons found</span>
+      <p class="state-sub">Run <code>make seed</code> to populate the academy.</p>
+    </div>
   {:else}
-    <div class="lesson-grid">
+    <div class="index-list">
       {#each lessons as lesson}
-        <a href="/academy/{lesson.id}" class="lesson-link">
-          <article class="lesson-card">
-            <div class="card-stripe"></div>
-            <div class="card-body">
-              <div class="card-top">
-                <span class="classification">{lesson.category}</span>
-                <DifficultyBadge level={lesson.difficulty} size="sm" />
-              </div>
-
-              <h2 class="card-title">{lesson.title}</h2>
-
-              <p class="card-desc">{lesson.description.slice(0, 200)}{lesson.description.length > 200 ? '...' : ''}</p>
-
-              <div class="card-footer">
-                <div class="tags">
-                  {#each lesson.tags.slice(0, 4) as tag}
-                    <span class="tag">{tag}</span>
-                  {/each}
-                </div>
-                <span class="read-time">{lesson.read_time_min} min read</span>
-              </div>
-            </div>
-          </article>
+        <a href="/academy/{lesson.id}" class="index-row">
+          <div class="row-main">
+            <h3 class="row-title">{lesson.title}</h3>
+            <p class="desc">{lesson.description.slice(0, 200)}{lesson.description.length > 200 ? '…' : ''}</p>
+            <p class="dateline">
+              <span class="cat">{lesson.category}</span>
+              <span class="sep">·</span>
+              <span>Difficulty <span class="tnum">{lesson.difficulty}</span></span>
+              <span class="sep">·</span>
+              <span class="tnum">{lesson.read_time_min} min read</span>
+            </p>
+          </div>
+          <div class="dl">
+            <DifficultyBadge level={lesson.difficulty} size="sm" />
+          </div>
         </a>
       {/each}
     </div>
@@ -89,131 +80,82 @@
   .academy {
     display: flex;
     flex-direction: column;
-    gap: var(--space-6);
   }
 
-  .academy-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
+  /* Masthead */
+  .masthead {
+    margin-bottom: var(--space-7);
   }
 
-  .academy-title {
+  .masthead-title {
     font-family: var(--font-serif);
-    font-size: 1.5rem;
+    font-size: var(--fs-h1);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.05;
+    color: var(--text-primary);
+    margin: var(--space-3) 0 var(--space-3);
   }
 
-  .academy-subtitle {
+  .masthead-lede {
+    max-width: var(--measure);
+    font-family: var(--font-serif);
+    font-size: var(--fs-lead);
+    line-height: 1.55;
     color: var(--text-secondary);
-    font-size: 0.9375rem;
-    margin-top: var(--space-1);
   }
 
-  .lesson-count {
-    font-family: var(--font-sans);
-    font-size: 0.75rem;
-    color: var(--text-tertiary);
+  /* Index list — hairline-ruled rows */
+  .index-list {
+    border-top: 1px solid var(--border-primary);
   }
 
-  /* Lesson grid */
-  .lesson-grid {
+  .index-row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-    gap: var(--space-5);
-  }
-
-  .lesson-link {
+    grid-template-columns: 1fr auto;
+    gap: var(--space-4) var(--space-5);
+    align-items: start;
+    padding: var(--space-4) var(--space-2);
+    border-bottom: 1px solid var(--border-primary);
+    border-left: 2px solid transparent;
+    transition: border-color 0.15s ease, background 0.15s ease;
     text-decoration: none;
     color: inherit;
   }
 
-  .lesson-card {
-    background: var(--bg-surface);
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    display: flex;
-    transition: all var(--transition-base);
-    height: 100%;
+  .index-row:hover {
+    border-left-color: var(--accent-primary);
+    background: var(--bg-hover);
   }
 
-  .lesson-card:hover {
-    border-color: var(--accent-blue);
-    box-shadow: var(--shadow-glow-blue);
-    transform: translateY(-2px);
-  }
-
-  .card-stripe {
-    width: 4px;
-    background: linear-gradient(180deg, var(--accent-red) 0%, var(--accent-orange) 50%, var(--accent-yellow) 100%);
-    flex-shrink: 0;
-  }
-
-  .card-body {
-    padding: var(--space-6);
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-3);
-    flex: 1;
-  }
-
-  .card-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .classification {
-    font-family: var(--font-sans);
-    font-size: 0.5625rem;
-    color: var(--text-tertiary);
+  .row-title {
+    font-family: var(--font-serif);
+    font-size: var(--fs-h4);
     font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    margin-bottom: var(--space-1);
+  }
+
+  .desc {
+    color: var(--text-secondary);
+    font-size: var(--fs-micro);
+    line-height: 1.55;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: var(--space-2);
+  }
+
+  .dateline .cat {
     text-transform: capitalize;
   }
 
-  .card-title {
-    font-family: var(--font-sans);
-    font-size: 1.0625rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.4;
-  }
-
-  .card-desc {
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
-    line-height: 1.6;
-    flex: 1;
-  }
-
-  .card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: var(--space-3);
-    border-top: 1px solid var(--border-primary);
-    gap: var(--space-2);
-  }
-
-  .tags {
-    display: flex;
-    gap: var(--space-1);
-    flex-wrap: wrap;
-  }
-
-  .tag {
-    font-family: var(--font-sans);
-    font-size: 0.5625rem;
-    color: var(--text-tertiary);
-    padding: 1px 6px;
-    border: 1px solid var(--border-primary);
-    border-radius: var(--radius-sm);
-  }
-
-  .read-time {
-    font-family: var(--font-sans);
-    font-size: 0.625rem;
-    color: var(--text-tertiary);
+  .dl {
+    align-self: center;
+    text-align: right;
     white-space: nowrap;
   }
 
@@ -223,47 +165,50 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-3);
-    padding: var(--space-12);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-card);
+    padding: var(--space-12) var(--space-6);
+    text-align: center;
+  }
+
+  .rule-s {
+    width: 32px;
+    height: 1px;
+    background: var(--border-secondary);
   }
 
   .state-text {
-    font-family: var(--font-sans);
-    font-size: 0.875rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    letter-spacing: 0.03em;
     color: var(--text-secondary);
-    animation: pulse 1.5s ease-in-out infinite;
   }
 
   .state-sub {
-    font-size: 0.8125rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
     color: var(--text-tertiary);
   }
 
   .state-sub code {
-    color: var(--text-primary);
-    background: var(--bg-tertiary);
-    padding: 2px 6px;
-    border-radius: var(--radius-sm);
-  }
-
-  .error-icon {
-    font-size: 2rem;
-    color: var(--accent-red);
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid var(--accent-red);
-    border-radius: 50%;
+    font-family: var(--font-mono);
+    color: var(--accent-primary);
   }
 
   .error-text {
+    font-family: var(--font-mono);
     color: var(--accent-red);
-    font-size: 0.875rem;
+    font-size: var(--fs-micro);
+    letter-spacing: 0.02em;
   }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 1; }
+  @media (max-width: 600px) {
+    .index-row {
+      grid-template-columns: 1fr;
+    }
+
+    .dl {
+      text-align: left;
+    }
   }
 </style>
