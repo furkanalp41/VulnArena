@@ -73,34 +73,13 @@ services:
     networks:
       - backend
 
-  # ── SvelteKit Frontend ──
-  web:
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-    container_name: vulnarena-web
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-      PORT: "3000"
-      ORIGIN: ${ORIGIN:-https://vulnarena.com}
-    healthcheck:
-      # adapter-node binds IPv4-only on 0.0.0.0; busybox wget resolves
-      # "localhost" to ::1 first and won't fall back to IPv4. Use 127.0.0.1.
-      # Also extended start_period to 15s for cold-start SSR of the landing
-      # page (Monaco-related chunks lazy-load on first hit).
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/"]
-      interval: 10s
-      timeout: 3s
-      start_period: 15s
-      retries: 3
-    networks:
-      - frontend
-
   # ── Nginx Reverse Proxy ──
-  # Terminates TLS for vulnarena.com. The cert is provisioned and renewed by
-  # the certbot service below. Run init-letsencrypt.sh once on a fresh host
-  # before `docker compose up -d` to issue the first cert.
+  # Hybrid deploy: the SvelteKit frontend runs on Vercel (vulnarena.com); this
+  # stack only serves the Go API at api.vulnarena.com. nginx terminates TLS for
+  # api.vulnarena.com and proxies /api, /health and the WebSocket endpoint to
+  # the api service. The cert is provisioned and renewed by the certbot service
+  # below — run init-letsencrypt.sh once on a fresh host before
+  # `docker compose up -d` to issue the first cert.
   nginx:
     image: nginx:1.27-alpine
     container_name: vulnarena-nginx
@@ -118,10 +97,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      web:
-        condition: service_healthy
     networks:
-      - frontend
       - backend
 
   # ── Certbot — Let's Encrypt cert issuance + automatic renewal ──
@@ -145,7 +121,5 @@ volumes:
   certbot_webroot:
 
 networks:
-  frontend:
-    driver: bridge
   backend:
     driver: bridge

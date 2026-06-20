@@ -32,14 +32,25 @@ if [ -f .env ]; then
   set +o allexport
 fi
 
-DOMAIN="${DOMAIN:-vulnarena.com}"
-WWW_DOMAIN="www.${DOMAIN}"
+DOMAIN="${DOMAIN:-api.vulnarena.com}"
 EMAIL="${CERTBOT_EMAIL:?CERTBOT_EMAIL must be set in .env}"
 STAGING="${CERTBOT_STAGING:-0}"  # set to 1 to test against Let's Encrypt staging
 
+# Include the www.<domain> SAN by default (for apex domains). A subdomain like
+# api.vulnarena.com has no "www." sibling, so set INCLUDE_WWW=0 in .env for the
+# hybrid deploy where this host only serves the API.
+INCLUDE_WWW="${INCLUDE_WWW:-0}"
+if [ "$INCLUDE_WWW" != "0" ]; then
+  CERT_DOMAIN_ARGS="-d ${DOMAIN} -d www.${DOMAIN}"
+  DOMAIN_LABEL="${DOMAIN}, www.${DOMAIN}"
+else
+  CERT_DOMAIN_ARGS="-d ${DOMAIN}"
+  DOMAIN_LABEL="${DOMAIN}"
+fi
+
 COMPOSE="docker compose -f docker-compose.prod.yml"
 
-echo "[+] Bootstrapping Let's Encrypt for ${DOMAIN}, ${WWW_DOMAIN}"
+echo "[+] Bootstrapping Let's Encrypt for ${DOMAIN_LABEL}"
 
 # ── Step 1: generate a placeholder cert so nginx can start ──
 echo "[+] Creating placeholder self-signed cert..."
@@ -76,7 +87,7 @@ $COMPOSE run --rm --entrypoint "\
     --agree-tos --no-eff-email \
     --rsa-key-size 4096 \
     --force-renewal \
-    -d ${DOMAIN} -d ${WWW_DOMAIN}" certbot
+    ${CERT_DOMAIN_ARGS}" certbot
 
 # ── Step 5: reload nginx to pick up the real cert ──
 echo "[+] Reloading nginx..."
