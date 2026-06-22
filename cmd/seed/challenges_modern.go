@@ -2437,7 +2437,7 @@ spec:
 			"Look at the RBAC Role. Does the API service account need access to ALL secrets, or just specific ones? What about the pods/exec permission?",
 			"There's a debug pod left in the manifests. Look at its securityContext and volume mounts — what access does it grant?",
 		},
-		vulnerableLines: []int{23, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 64, 65, 77, 78, 79, 84, 85, 86, 114, 119, 120, 124, 125, 126, 127},
+		vulnerableLines: []int{20, 23, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 64, 65, 77, 78, 79, 84, 85, 86, 114, 119, 120, 124, 125, 126, 127},
 		cveReference:    "",
 	}
 }
@@ -2773,7 +2773,7 @@ All these are amplified by the Cache-Control: public headers (lines 54, 67, 81) 
 			"Look at how req.baseUrl is constructed from X-Forwarded-Host. If an attacker sets this header to 'evil.com', what URLs end up in the cached HTML?",
 			"The response includes Cache-Control: public, max-age=3600. This means the CDN will serve the SAME response to ALL users for 1 hour. If that response was generated with the attacker's X-Forwarded-Host value, what do all users receive?",
 		},
-		vulnerableLines: []int{13, 14, 16, 17, 33, 34, 35, 48, 50, 58, 76, 77, 85, 88, 89, 90},
+		vulnerableLines: []int{13, 14, 17, 26, 29, 33, 34, 35, 49, 50, 51, 65, 77, 85, 89, 90},
 		cveReference:    "",
 	}
 }

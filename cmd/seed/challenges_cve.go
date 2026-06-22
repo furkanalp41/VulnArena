@@ -355,7 +355,7 @@ func cveRustUnsafeUAF() challengeSeed {
 			"What happens to 'conn_ptr' after release_connection is called?",
 			"After release, the connection is back in the pool — but the caller still holds a raw pointer to it.",
 		},
-		vulnerableLines: []int{38, 39, 40, 55},
+		vulnerableLines: []int{52, 70, 75, 76},
 		code: `use std::collections::VecDeque;
 use std::ptr;
 
@@ -457,7 +457,7 @@ func cvePyYAMLDeser() challengeSeed {
 			"What YAML tags can trigger Python object instantiation?",
 			"Compare yaml.load() vs yaml.safe_load() — which one restricts object creation?",
 		},
-		vulnerableLines: []int{24, 25},
+		vulnerableLines: []int{25, 51},
 		code: `from flask import Flask, request, jsonify
 import yaml
 import os
@@ -1181,7 +1181,7 @@ func cveCppUAFVector() challengeSeed {
 			"std::vector may reallocate when push_back is called — what happens to existing references?",
 			"The 'session' reference on line 43 may become dangling after add_session modifies the vector.",
 		},
-		vulnerableLines: []int{27, 28, 45, 46},
+		vulnerableLines: []int{23, 31, 49, 59, 64, 65, 66},
 		code: `#include <iostream>
 #include <vector>
 #include <string>
@@ -1362,7 +1362,7 @@ func cvePythonCmdInjection() challengeSeed {
 			"What happens when the hostname contains shell metacharacters like ';' or '&&'?",
 			"The shell=True argument means the command string is interpreted by /bin/sh.",
 		},
-		vulnerableLines: []int{20, 21, 22},
+		vulnerableLines: []int{20, 22, 23, 44, 46, 47},
 		code: `from flask import Flask, request, jsonify
 import subprocess
 import re
@@ -1688,7 +1688,7 @@ func cveGoPathTraversal() challengeSeed {
 			"Does filepath.Join() prevent path traversal with '../' sequences?",
 			"What validation ensures the resolved path stays within the upload directory?",
 		},
-		vulnerableLines: []int{31},
+		vulnerableLines: []int{31, 54, 55},
 		code: `package main
 
 import (
@@ -1780,7 +1780,7 @@ func cveCSharpBinaryFormatter() challengeSeed {
 			"BinaryFormatter is known to be dangerous with untrusted data — why?",
 			"Microsoft has explicitly deprecated BinaryFormatter due to deserialization vulnerabilities.",
 		},
-		vulnerableLines: []int{34, 36, 37},
+		vulnerableLines: []int{60, 61},
 		code: `using System;
 using System.IO;
 using System.Net;

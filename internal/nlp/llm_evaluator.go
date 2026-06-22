@@ -56,82 +56,41 @@ func (e *LLMEvaluator) Evaluate(ctx context.Context, req EvaluationRequest) (*Ev
 		}
 	}
 
-	// Build relevant term sets from the challenge's ground truth
+	// Build relevant canonical term sets from the challenge's ground truth.
 	vulnTerms, fixTerms := buildRelevantTerms(req.TargetVulnerability, req.ConceptualFix)
 
 	logf("> Loaded %d vulnerability concept signatures", len(vulnTerms))
 	logf("> Loaded %d remediation concept signatures", len(fixTerms))
 	logf("> Running concept extraction on submission...")
 
-	// Extract matched concepts from user's answer
-	matchedVuln := extractMatchedTerms(req.UserAnswer, vulnTerms)
-	matchedFix := extractMatchedTerms(req.UserAnswer, fixTerms)
+	// Score each axis as a blend of canonical-concept matching and overlap with
+	// the challenge's OWN ground-truth vocabulary. The keyword-overlap path is
+	// what keeps every vulnerability class scorable — including the many that
+	// the canonical map doesn't enumerate — so a correct answer is never
+	// mathematically locked out of passing.
+	lowerAnswer := strings.ToLower(req.UserAnswer)
+	vulnRatio, matchedVuln := conceptCoverage(lowerAnswer, vulnTerms, req.TargetVulnerability)
+	fixRatio, matchedFix := conceptCoverage(lowerAnswer, fixTerms, req.ConceptualFix)
 
-	logf("> Vulnerability concepts matched: %d/%d", len(matchedVuln), len(vulnTerms))
+	logf("> Vulnerability concept coverage: %.0f%% (%d canonical concept(s) detected)", vulnRatio*100, len(matchedVuln))
 	for _, term := range matchedVuln {
 		logf("  [+] Detected: %s", term)
 	}
 
-	logf("> Remediation concepts matched: %d/%d", len(matchedFix), len(fixTerms))
+	logf("> Remediation concept coverage: %.0f%% (%d canonical concept(s) detected)", fixRatio*100, len(matchedFix))
 	for _, term := range matchedFix {
 		logf("  [+] Detected: %s", term)
 	}
 
-	// --- Line accuracy scoring ---
+	// --- Line accuracy scoring (region-based) ---
 	lineAccuracy := 0.0
 	hasLineTargeting := len(req.VulnerableLines) > 0
 	if hasLineTargeting && len(req.UserTargetLines) > 0 {
-		logf("> Line targeting: user flagged %d line(s), ground truth has %d", len(req.UserTargetLines), len(req.VulnerableLines))
-
-		// Build truth set for fast lookup
-		truthSet := make(map[int]bool, len(req.VulnerableLines))
-		for _, l := range req.VulnerableLines {
-			truthSet[l] = true
-		}
-
-		// Track which truth lines have been claimed to prevent double-matching.
-		// Each truth line can only be "hit" once even if multiple user lines
-		// fall within its ±2 tolerance window.
-		claimedTruth := make(map[int]bool, len(req.VulnerableLines))
-		hits := 0
-
-		for _, ul := range req.UserTargetLines {
-			matched := false
-			// Check ±2 tolerance, prefer exact match first
-			for _, offset := range []int{0, -1, 1, -2, 2} {
-				candidate := ul + offset
-				if truthSet[candidate] && !claimedTruth[candidate] {
-					claimedTruth[candidate] = true
-					hits++
-					matched = true
-					logf("  [+] Line %d — HIT (matches vulnerable line %d)", ul, candidate)
-					break
-				}
-			}
-			if !matched {
-				logf("  [-] Line %d — MISS", ul)
-			}
-		}
-
-		precision := float64(hits) / float64(len(req.UserTargetLines))
-		recall := float64(hits) / float64(len(req.VulnerableLines))
-		if precision+recall > 0 {
-			lineAccuracy = 2 * precision * recall / (precision + recall) * 100 // F1 score
-		}
-		logf("> Line accuracy (F1): %.1f%%", lineAccuracy)
+		var lineLog []string
+		lineAccuracy, lineLog = scoreLineAccuracy(req.VulnerableLines, req.UserTargetLines)
+		log = append(log, lineLog...)
 	} else if hasLineTargeting {
 		logf("> Line targeting: no lines submitted by user (0%%)")
-	}
-
-	// --- Score calculation ---
-	vulnRatio := 0.0
-	if len(vulnTerms) > 0 {
-		vulnRatio = float64(len(matchedVuln)) / float64(len(vulnTerms))
-	}
-
-	fixRatio := 0.0
-	if len(fixTerms) > 0 {
-		fixRatio = float64(len(matchedFix)) / float64(len(fixTerms))
 	}
 
 	wordCount := len(strings.Fields(req.UserAnswer))

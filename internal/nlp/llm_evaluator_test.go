@@ -65,18 +65,51 @@ func TestLineF1_OffByThreeMisses(t *testing.T) {
 	}
 }
 
-func TestLineF1_DuplicateUserLineNotDoubleCredit(t *testing.T) {
-	// User submits the same line twice. Only one truth match can be claimed.
-	// precision = 1/2, recall = 1/1, F1 = 2*0.5*1.0/1.5 = 0.6667.
+func TestLineF1_DuplicateUserLineDeduped(t *testing.T) {
+	// User submits the same line twice. Region-based scoring de-duplicates the
+	// user's flagged lines first (the UI already does this), so [10,10] is
+	// equivalent to [10]: precision 1/1, recall 1/1 → 100. (Previously the
+	// evaluator F1'd the raw list and returned 66.67; de-duplication is the
+	// correct behaviour and matches what the client actually submits.)
 	res := runEval(t, EvaluationRequest{
 		TargetVulnerability: "sql injection",
 		ConceptualFix:       "parameterized queries",
 		VulnerableLines:     []int{10},
 		UserTargetLines:     []int{10, 10},
 	})
-	want := 2 * (1.0 / 2.0) * (1.0 / 1.0) / (1.0/2.0 + 1.0/1.0) * 100
+	if !approxEq(res.LineAccuracy, 100.0) {
+		t.Errorf("duplicate user line should dedup to 100, got %v", res.LineAccuracy)
+	}
+}
+
+func TestLineF1_ContiguousBlockSingleClick(t *testing.T) {
+	// A multi-line vulnerable block (e.g. a 4-line SQL statement) collapses to a
+	// single region. A user who flags ONE line inside it has found the block and
+	// must score 100 — they should not be punished for not enumerating every
+	// line. This is the core fairness fix for block-style vulnerabilities.
+	res := runEval(t, EvaluationRequest{
+		TargetVulnerability: "sql injection",
+		ConceptualFix:       "parameterized queries",
+		VulnerableLines:     []int{47, 48, 49, 50},
+		UserTargetLines:     []int{49},
+	})
+	if !approxEq(res.LineAccuracy, 100.0) {
+		t.Errorf("single click inside contiguous block: want 100, got %v", res.LineAccuracy)
+	}
+}
+
+func TestLineF1_TwoRegionsOneFound(t *testing.T) {
+	// Two separate vulnerable sites (two regions). User finds one. recall = 1/2,
+	// precision = 1/1, F1 = 2*1*0.5/1.5 = 66.67.
+	res := runEval(t, EvaluationRequest{
+		TargetVulnerability: "sql injection",
+		ConceptualFix:       "parameterized queries",
+		VulnerableLines:     []int{10, 11, 40, 41},
+		UserTargetLines:     []int{10},
+	})
+	want := 2 * 1.0 * 0.5 / 1.5 * 100
 	if !approxEq(res.LineAccuracy, want) {
-		t.Errorf("duplicate user line: want %.2f, got %v", want, res.LineAccuracy)
+		t.Errorf("two regions one found: want %.2f, got %v", want, res.LineAccuracy)
 	}
 }
 
@@ -163,6 +196,53 @@ func TestVulnIdentified_LowFidelity(t *testing.T) {
 	})
 	if res.VulnIdentified {
 		t.Errorf("vuln_identified should be false for clearly wrong answer; got score=%v", res.VulnScore)
+	}
+}
+
+// ── Uncovered-category scorability (the production bug) ──
+
+// A challenge whose vulnerability class is NOT in the canonical securityTerms
+// map (here: SSTI) used to be mathematically unpassable, because the old
+// buildRelevantTerms fell back to the ENTIRE map and a perfect answer matched
+// only a tiny fraction. A correct, detailed answer with correct lines must now
+// PASS via ground-truth keyword overlap.
+func TestUncoveredCategory_CorrectAnswerPasses(t *testing.T) {
+	res := runEval(t, EvaluationRequest{
+		UserAnswer: "This is a server-side template injection. The user-controlled name is passed " +
+			"straight into render_template_string, so Jinja2 evaluates it as a template. An attacker " +
+			"submits {{7*7}} or accesses the config to reach os.system and gain remote code execution. " +
+			"The fix is to never render user input as a template — render a static template and pass the " +
+			"user value strictly as context data, and enable autoescape / a sandbox.",
+		TargetVulnerability: "Server-side template injection (SSTI) in the Jinja2 render_template_string call. " +
+			"The user-supplied name parameter is concatenated into the template string and evaluated by the " +
+			"template engine, allowing an attacker to execute arbitrary Python and achieve remote code execution.",
+		ConceptualFix: "Never render user input as a template. Render a static template and pass user data " +
+			"only as bound context variables. Enable the sandbox and autoescape.",
+		Language:        "python",
+		Difficulty:      6,
+		VulnerableLines: []int{42, 43},
+		UserTargetLines: []int{42},
+	})
+	if !res.Passed {
+		t.Errorf("correct SSTI answer must pass; got overall=%v (vuln=%v fix=%v line=%v)",
+			res.OverallScore, res.VulnScore, res.FixScore, res.LineAccuracy)
+	}
+}
+
+// The generosity must not let a vague non-answer through. A short, content-free
+// submission on the same uncovered-category challenge must still FAIL.
+func TestUncoveredCategory_JunkAnswerFails(t *testing.T) {
+	res := runEval(t, EvaluationRequest{
+		UserAnswer:          "i think this is bad and unsafe, you should fix it somehow",
+		TargetVulnerability: "Server-side template injection (SSTI) in the Jinja2 render_template_string call.",
+		ConceptualFix:       "Render a static template and pass user data only as bound context variables.",
+		Language:            "python",
+		Difficulty:          6,
+		VulnerableLines:     []int{42, 43},
+		UserTargetLines:     []int{10}, // wrong line too
+	})
+	if res.Passed {
+		t.Errorf("junk answer must fail; got overall=%v", res.OverallScore)
 	}
 }
 

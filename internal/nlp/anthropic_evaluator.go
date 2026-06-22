@@ -69,7 +69,13 @@ Score the submission on three axes (0-100 each):
 ### Line Accuracy (line_accuracy) — Weight: 30%
 - Did the user correctly identify the vulnerable line numbers?
 - Allow ±2 line tolerance (e.g., if truth is line 45, lines 43-47 count as hits).
-- Score using F1 (precision × recall harmonic mean) of correct line hits.
+- Treat a contiguous run of vulnerable lines as ONE region: a user who flags any
+  single line within ±2 of a multi-line vulnerable block has FOUND that block —
+  award full credit for it; never penalise them for not listing every line of it.
+- Score using F1 (precision × recall harmonic mean) over distinct vulnerable
+  regions the user located vs. how many of their flags landed on real vulnerable code.
+- Be generous: the goal is to confirm the user pinpointed the flaw, not to demand
+  they reproduce the exact line set. Reward identifying the genuine sink line(s).
 - If no VULNERABLE_LINES are provided (legacy challenge), set line_accuracy to 0 and use the legacy 60/40 weighting for vuln_score/fix_score.
 
 ## Scoring Guidelines

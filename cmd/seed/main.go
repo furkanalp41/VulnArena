@@ -19,8 +19,10 @@ import (
 func main() {
 	var verifyOnly bool
 	var verbose bool
+	var auditDir string
 	flag.BoolVar(&verifyOnly, "verify", false, "Verify VulnerableLines for every challenge and exit (no DB writes)")
 	flag.BoolVar(&verbose, "v", false, "Print every matched vulnerable line during verification")
+	flag.StringVar(&auditDir, "audit", "", "Write per-challenge line-annotated listings to this dir and exit (no DB writes)")
 	flag.Parse()
 
 	_ = godotenv.Load()
@@ -32,6 +34,13 @@ func main() {
 		log.Fatalf("\n[!] Challenge line verification FAILED:\n%v", err)
 	}
 	fmt.Printf("[+] Verified VulnerableLines for %d challenges.\n\n", len(challengesEarly))
+
+	if auditDir != "" {
+		if err := runAudit(challengesEarly, auditDir); err != nil {
+			log.Fatalf("[!] audit dump failed: %v", err)
+		}
+		return
+	}
 
 	if verifyOnly {
 		fmt.Println("[+] Verify-only mode: skipping database writes.")
@@ -926,7 +935,7 @@ func challenge5_RustMemory() challengeSeed {
 		catSlug:         "memory-corruption",
 		points:          500,
 		cveReference:    "CVE-2022-21658 (unsafe memory pattern in Rust)",
-		vulnerableLines: []int{63, 64, 65, 95, 96, 98, 99, 103, 104},
+		vulnerableLines: []int{55, 58, 103, 104, 107, 112},
 		description: `A high-performance Rust cache server uses unsafe code blocks to achieve
 zero-copy deserialization and manual memory management for hot-path
 optimization. The service handles ~100K requests/second and any latency
@@ -1170,7 +1179,7 @@ func challenge6_CppRCE() challengeSeed {
 		catSlug:         "insecure-deser",
 		points:          800,
 		cveReference:    "CVE-2021-22555 (type confusion / object lifecycle pattern)",
-		vulnerableLines: []int{91, 92, 93, 94, 95, 98, 111, 113, 114, 115, 116},
+		vulnerableLines: []int{193, 207, 213, 214, 215, 216, 217, 228},
 		description: `A C++ application server implements a plugin system that loads and
 executes user-uploaded "analysis modules." The modules are serialized C++
 objects transmitted over a custom binary protocol. The server deserializes
